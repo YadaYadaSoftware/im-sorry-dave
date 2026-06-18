@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SorryDave.JiraSync.Core\SorryDave.JiraSync.Core.csproj" />
+    <ProjectReference Include="..\SorryDave.JiraSync.ServiceDefaults\SorryDave.JiraSync.ServiceDefaults.csproj" />
   </ItemGroup>
 
 </Project>

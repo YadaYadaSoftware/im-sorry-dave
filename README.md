@@ -77,10 +77,40 @@ no secret is configured).
 dotnet test
 ```
 
+## Aspire AppHost (`aspire-apphost`)
+
+A [.NET Aspire](https://learn.microsoft.com/dotnet/aspire/) AppHost orchestrates the solution:
+it starts the **API**, waits until the API's `/health` reports healthy, then makes the
+smoke-test **console** available — with a dashboard for logs and health.
+
+```bash
+dotnet run --project src/SorryDave.JiraSync.AppHost
+```
+
+This launches the API and the Aspire dashboard (the URL is printed on startup). The API uses
+its own configuration — with the API project's user-secrets it tracks real Jira (`MDP`).
+
+The `console` resource is registered with **explicit start**. A Terminal.Gui UI cannot run inside
+Aspire's process host (DCP redirects stdio, so it can't initialize a console), so the resource is
+an executable that — when you press ▶ on it in the dashboard — **opens the TUI in a new terminal
+window**. It waits for the API and inherits the API endpoint via service discovery. (The dashboard
+marks the resource finished immediately, because the launcher returns as soon as the window opens.)
+
+You can also run the TUI yourself in a terminal; it falls back to `http://localhost:5050` when not
+launched by the AppHost:
+
+```bash
+dotnet run --project src/SorryDave.JiraSync.SmokeTui
+```
+
+`SorryDave.JiraSync.ServiceDefaults` wires the API's health/OpenTelemetry/service-discovery
+defaults so the AppHost's health-gated ordering has a definite readiness signal.
+
 ## Smoke-test TUI (`tui-smoke-test`)
 
 An interactive [Terminal.Gui](https://github.com/gui-cs/Terminal.Gui) console app for eyes-on
-smoke testing of jira-sync-core. It drives the same Core services as the API.
+smoke testing. It is a **client of the running API** (it does not use Core in-process) and
+shows whatever backend the API is configured for.
 
 ```bash
 dotnet run --project src/SorryDave.JiraSync.SmokeTui
@@ -88,18 +118,16 @@ dotnet run --project src/SorryDave.JiraSync.SmokeTui
 
 > Run it in a real terminal (it takes over the console) — not through a redirected/headless pipe.
 
-By default it runs against the **in-memory fake Jira** (seeded with `DAVE-1`/`DAVE-2`), so it
-needs no credentials and has no side effects; the status bar shows `Mode: FAKE`. To smoke-test
-against real Jira, set env vars before launching (`Jira__BaseUrl`, `Jira__Email`,
-`Jira__ApiToken`); the status bar then shows `Mode: REAL` and any action that would modify Jira
-asks for confirmation first.
+It targets the API base address from configuration (`services:api:http:0` injected by Aspire,
+or `ApiBaseUrl`), defaulting to `http://localhost:5050`. The status bar shows `API: <url>`. So
+start the API first (directly or via the AppHost), then run the console.
 
-What you can do:
+What you can do (all via the API):
 
-- **Backfill** — mirror tracked work items into the local store.
-- **Simulate webhook** — feed a sample `jira:issue_updated` event through the processor and watch the work item update.
-- **Submit write-back** — queue a decision and drain the outbox; see it reach `Sent` and the resulting Jira comment.
-- **Guided smoke run** (menu *Run → Guided smoke run*, or `Ctrl-R`) — runs backfill → write-back → deliver → verify and reports per-step **PASS/FAIL** with an overall result.
+- **Backfill** — `POST /admin/backfill` to mirror tracked work items.
+- **Simulate webhook** — posts a sample `jira:issue_updated` event to `POST /webhooks/jira`.
+- **Submit write-back** — posts a decision and drains the outbox (`POST /admin/drain-writeback`); watch it reach `Sent`.
+- **Guided smoke run** (menu *Run → Guided smoke run*, or `Ctrl-R`) — backfill → write-back → deliver → verify, reported per-step **PASS/FAIL**.
 
-Keys: `F5` refresh · `Ctrl-R` smoke run · `Ctrl-Q` quit. The guided-run logic is also covered
-headlessly by `JiraSyncSmokeRunnerTests` in the test project.
+Keys: `F5` refresh · `Ctrl-R` smoke run · `Ctrl-Q` quit. The guided-run logic is covered
+headlessly by `JiraSyncSmokeRunnerTests` (using an in-memory fake API client).

@@ -1,8 +1,4 @@
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using SorryDave.JiraSync.Core.DependencyInjection;
-using SorryDave.JiraSync.Core.Persistence;
+using SorryDave.JiraSync.SmokeTui.Api;
 using SorryDave.JiraSync.SmokeTui.Smoke;
 
 namespace SorryDave.JiraSync.Tests;
@@ -10,37 +6,64 @@ namespace SorryDave.JiraSync.Tests;
 public class JiraSyncSmokeRunnerTests
 {
     [Fact]
-    public async Task Guided_run_passes_every_step_against_fake_backend()
+    public async Task Guided_run_passes_every_step_against_a_fake_api()
     {
-        // File-backed SQLite so the runner's multiple scopes share one database.
-        var dbPath = Path.Combine(Path.GetTempPath(), $"smoke-{Guid.NewGuid():N}.db");
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
+        var steps = await new JiraSyncSmokeRunner(new FakeApiClient()).RunAsync();
+
+        Assert.NotEmpty(steps);
+        Assert.True(JiraSyncSmokeRunner.AllPassed(steps),
+            "Steps:\n" + string.Join("\n", steps.Select(s => $"[{(s.Passed ? "PASS" : "FAIL")}] {s.Name} — {s.Detail}")));
+        Assert.Contains(steps, s => s.Name == "Verify delivery" && s.Passed);
+    }
+
+    /// <summary>In-memory IApiClient that mimics the API's happy-path behavior.</summary>
+    private sealed class FakeApiClient : IApiClient
+    {
+        private readonly List<WorkItemDto> _items = new();
+        private readonly List<WriteBackDto> _writeBacks = new();
+        private int _commentSeq;
+
+        public string BaseAddress => "fake://api";
+
+        public Task<int> BackfillAsync(CancellationToken ct = default)
+        {
+            if (_items.Count == 0)
+                _items.Add(new WorkItemDto("DAVE-1", "DAVE", "Story", "To Do", "Dave Bowman", "Open the pod bay doors", false));
+            return Task.FromResult(_items.Count);
+        }
+
+        public Task<int> ReconcileAsync(CancellationToken ct = default) => Task.FromResult(_items.Count);
+
+        public Task<IReadOnlyList<WorkItemDto>> GetWorkItemsAsync(CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<WorkItemDto>>(_items.ToList());
+
+        public Task<WriteBackDto> SubmitWriteBackAsync(string workItemKey, WriteBackRequest request, CancellationToken ct = default)
+        {
+            var record = new WriteBackDto(Guid.NewGuid(), workItemKey, request.RecordIdentity, request.Kind, "Pending", null, 0, null);
+            _writeBacks.Add(record);
+            return Task.FromResult(record);
+        }
+
+        public Task<int> DrainWriteBackAsync(CancellationToken ct = default)
+        {
+            var drained = 0;
+            for (var i = 0; i < _writeBacks.Count; i++)
             {
-                ["ConnectionStrings:JiraSync"] = $"Data Source={dbPath}"
-            })
-            .Build();
-
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddJiraSyncCore(config); // no Jira credentials -> in-memory fake client
-        await using var provider = services.BuildServiceProvider();
-
-        using (var scope = provider.CreateScope())
-            scope.ServiceProvider.GetRequiredService<JiraSyncDbContext>().Database.Migrate();
-
-        try
-        {
-            var steps = await new JiraSyncSmokeRunner(provider).RunAsync();
-
-            Assert.NotEmpty(steps);
-            Assert.True(JiraSyncSmokeRunner.AllPassed(steps),
-                "Steps:\n" + string.Join("\n", steps.Select(s => $"[{(s.Passed ? "PASS" : "FAIL")}] {s.Name} — {s.Detail}")));
-            Assert.Contains(steps, s => s.Name == "Verify delivery" && s.Passed);
+                if (_writeBacks[i].Status == "Pending")
+                {
+                    _writeBacks[i] = _writeBacks[i] with { Status = "Sent", JiraCommentId = $"c{++_commentSeq}" };
+                    drained++;
+                }
+            }
+            return Task.FromResult(drained);
         }
-        finally
-        {
-            try { File.Delete(dbPath); } catch { /* best effort */ }
-        }
+
+        public Task<IReadOnlyList<WriteBackDto>> GetWriteBacksAsync(CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<WriteBackDto>>(_writeBacks.ToList());
+
+        public Task SimulateWebhookAsync(WorkItemDto item, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task<IReadOnlyList<CommentDto>?> GetFakeCommentsAsync(CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<CommentDto>?>(new List<CommentDto>());
     }
 }

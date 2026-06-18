@@ -1,7 +1,9 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/SorryDave.JiraSync.Api/SorryDave.JiraSync.Api.csproj" />
+    <Project Path="src/SorryDave.JiraSync.AppHost/SorryDave.JiraSync.AppHost.csproj" />
     <Project Path="src/SorryDave.JiraSync.Core/SorryDave.JiraSync.Core.csproj" />
+    <Project Path="src/SorryDave.JiraSync.ServiceDefaults/SorryDave.JiraSync.ServiceDefaults.csproj" />
     <Project Path="src/SorryDave.JiraSync.SmokeTui/SorryDave.JiraSync.SmokeTui.csproj" />
   </Folder>
   <Folder Name="/tests/">

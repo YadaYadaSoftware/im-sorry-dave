@@ -1,19 +1,17 @@
+using SorryDave.JiraSync.SmokeTui.Api;
 using SorryDave.JiraSync.SmokeTui.Smoke;
 using Terminal.Gui;
 
 namespace SorryDave.JiraSync.SmokeTui.Ui;
 
 /// <summary>
-/// Modal view for the guided smoke run. Runs <see cref="JiraSyncSmokeRunner"/> on a background
-/// thread and renders each step's pass/fail plus an overall result.
+/// Modal view for the guided smoke run. Runs <see cref="JiraSyncSmokeRunner"/> (over the API) on
+/// a background thread and renders each step's pass/fail plus an overall result.
 /// </summary>
 public static class SmokeRunView
 {
-    public static void Show(IServiceProvider provider)
+    public static void Show(IApiClient client)
     {
-        if (!UiPrompts.ConfirmRealMutation(provider, "Run the guided smoke sequence (posts a comment)."))
-            return;
-
         var lines = new List<string> { "Running guided smoke run..." };
         var list = new ListView(lines)
         {
@@ -35,7 +33,7 @@ public static class SmokeRunView
             IReadOnlyList<SmokeStep> steps;
             try
             {
-                steps = await new JiraSyncSmokeRunner(provider).RunAsync();
+                steps = await new JiraSyncSmokeRunner(client).RunAsync();
             }
             catch (Exception ex)
             {

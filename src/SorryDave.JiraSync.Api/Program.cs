@@ -3,9 +3,11 @@ using Microsoft.EntityFrameworkCore;
 using SorryDave.JiraSync.Api.Endpoints;
 using SorryDave.JiraSync.Core.DependencyInjection;
 using SorryDave.JiraSync.Core.Persistence;
+using SorryDave.JiraSync.ServiceDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.AddServiceDefaults();
 builder.Services.AddJiraSyncCore(builder.Configuration);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -26,11 +28,12 @@ using (var scope = app.Services.CreateScope())
 app.UseSwagger();
 app.UseSwaggerUI();
 
+app.MapDefaultEndpoints(); // /health and /alive (used by Aspire health-gated startup)
 app.MapGet("/", () => Results.Redirect("/swagger"));
-app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.MapWebhookEndpoints();
 app.MapWorkItemEndpoints();
+app.MapAdminEndpoints();
 
 app.Run();
 
