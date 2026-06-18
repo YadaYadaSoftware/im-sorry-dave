@@ -60,6 +60,6 @@ CLI to avoid behavioral drift.
 
 ## Open Questions
 
-- Terminal.Gui v1 vs v2 — default to v2 unless the team standardizes otherwise.
+- Terminal.Gui v1 vs v2 — **resolved: implemented on v1 (1.17.x)** for a stable, well-known API since the TUI cannot be interactively verified in CI; revisit if the team standardizes on v2.
 - Should the guided run be exportable (e.g. write a pass/fail summary to a file) for sharing?
 - Should panels talk to in-process services directly (chosen) or to a running API over HTTP?

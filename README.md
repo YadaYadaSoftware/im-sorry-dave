@@ -76,3 +76,30 @@ no secret is configured).
 ```bash
 dotnet test
 ```
+
+## Smoke-test TUI (`tui-smoke-test`)
+
+An interactive [Terminal.Gui](https://github.com/gui-cs/Terminal.Gui) console app for eyes-on
+smoke testing of jira-sync-core. It drives the same Core services as the API.
+
+```bash
+dotnet run --project src/SorryDave.JiraSync.SmokeTui
+```
+
+> Run it in a real terminal (it takes over the console) — not through a redirected/headless pipe.
+
+By default it runs against the **in-memory fake Jira** (seeded with `DAVE-1`/`DAVE-2`), so it
+needs no credentials and has no side effects; the status bar shows `Mode: FAKE`. To smoke-test
+against real Jira, set env vars before launching (`Jira__BaseUrl`, `Jira__Email`,
+`Jira__ApiToken`); the status bar then shows `Mode: REAL` and any action that would modify Jira
+asks for confirmation first.
+
+What you can do:
+
+- **Backfill** — mirror tracked work items into the local store.
+- **Simulate webhook** — feed a sample `jira:issue_updated` event through the processor and watch the work item update.
+- **Submit write-back** — queue a decision and drain the outbox; see it reach `Sent` and the resulting Jira comment.
+- **Guided smoke run** (menu *Run → Guided smoke run*, or `Ctrl-R`) — runs backfill → write-back → deliver → verify and reports per-step **PASS/FAIL** with an overall result.
+
+Keys: `F5` refresh · `Ctrl-R` smoke run · `Ctrl-Q` quit. The guided-run logic is also covered
+headlessly by `JiraSyncSmokeRunnerTests` in the test project.

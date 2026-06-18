@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SorryDave.JiraSync.Core\SorryDave.JiraSync.Core.csproj" />
+    <ProjectReference Include="..\..\src\SorryDave.JiraSync.SmokeTui\SorryDave.JiraSync.SmokeTui.csproj" />
   </ItemGroup>
 
 </Project>
