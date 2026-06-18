@@ -50,3 +50,22 @@ The system SHALL handle Jira write failures without losing the record and SHALL 
 
 - **WHEN** a write-back fails permanently (e.g., issue does not exist, permission denied)
 - **THEN** the system records the failure and surfaces it to operators rather than silently discarding the record
+
+### Requirement: Console commands drive write-back
+
+The console application SHALL provide commands to submit a decision/answer/summary for write-back, list outbox records with their delivery status, and retry a failed record.
+
+#### Scenario: Submit a write-back from the console
+
+- **WHEN** the operator runs the writeback submit command with a work-item key, record identity, kind, and content
+- **THEN** the console queues the record idempotently and reports its status
+
+#### Scenario: Inspect the outbox
+
+- **WHEN** the operator runs the writeback list command
+- **THEN** the console prints outbox records with their status, attempts, and last error
+
+#### Scenario: Retry a failed record
+
+- **WHEN** the operator runs the writeback retry command for a failed record
+- **THEN** the console re-queues it for delivery and reports the new status

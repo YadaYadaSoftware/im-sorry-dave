@@ -33,3 +33,8 @@
 - [ ] 6.1 Add a dry-run mode that reports planned creates/updates without writing
 - [ ] 6.2 Unit tests for idempotency key, granularity policy, and human-edit preservation
 - [ ] 6.3 Integration test: generate from a sample change → re-run is idempotent → added task creates one item
+
+## 7. Console commands
+
+- [ ] 7.1 Provide `openspec link <change> <key>` and `openspec status <change>` handlers
+- [ ] 7.2 Provide `openspec generate <change>` handler with `--dry-run` preview support

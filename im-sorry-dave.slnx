@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SorryDave.JiraSync.Api/SorryDave.JiraSync.Api.csproj" />
+    <Project Path="src/SorryDave.JiraSync.Core/SorryDave.JiraSync.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SorryDave.JiraSync.Tests/SorryDave.JiraSync.Tests.csproj" />
+  </Folder>
+</Solution>

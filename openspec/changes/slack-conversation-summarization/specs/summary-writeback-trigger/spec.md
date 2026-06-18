@@ -46,3 +46,17 @@ The system SHALL route confirmed candidates through the core write-back capabili
 
 - **WHEN** a confirmed write-back fails permanently
 - **THEN** the system reports the failure in the originating channel so a human can act
+
+### Requirement: Console commands drive summarization and candidate review
+
+The console application SHALL provide commands to run extraction over a conversation, list extracted candidates, and confirm or reject a candidate for write-back.
+
+#### Scenario: Summarize from the console
+
+- **WHEN** the operator runs the summarize command for a work item or channel
+- **THEN** the console runs extraction over the conversation window and prints the candidate decisions/answers/summary
+
+#### Scenario: Confirm a candidate from the console
+
+- **WHEN** the operator runs the candidate confirm command for a candidate id
+- **THEN** the console submits the confirmed candidate to Jira write-back, honoring `--dry-run`

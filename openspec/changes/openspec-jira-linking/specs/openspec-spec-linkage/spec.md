@@ -41,3 +41,17 @@ The system SHALL determine OpenSpec change status from the authoritative OpenSpe
 
 - **WHEN** the system needs a change's artifact/task status
 - **THEN** it reads the status from the OpenSpec CLI/artifacts rather than inferring it from Jira
+
+### Requirement: Console commands link specs and report status
+
+The console application SHALL provide commands to link an OpenSpec change to a work item and to report a change's status as surfaced to Jira.
+
+#### Scenario: Link a change from the console
+
+- **WHEN** the operator runs the openspec link command with a change name and work-item key
+- **THEN** the console records the change ↔ work-item association, or reports a conflict
+
+#### Scenario: Show change status
+
+- **WHEN** the operator runs the openspec status command for a change
+- **THEN** the console prints the change's artifact/task status

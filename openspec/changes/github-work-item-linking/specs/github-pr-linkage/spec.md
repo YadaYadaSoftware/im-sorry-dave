@@ -56,3 +56,17 @@ The system SHALL store the GitHub pull request ↔ work-item association in the 
 
 - **WHEN** more than one pull request references the same work item
 - **THEN** the system links all of them to that work item
+
+### Requirement: Console commands drive PR linking
+
+The console application SHALL provide commands to scan a repository/pull request for work-item keys and to link a pull request to a work item.
+
+#### Scenario: Scan a PR from the console
+
+- **WHEN** the operator runs the github scan command for a pull request
+- **THEN** the console reports the detected work-item keys and whether each resolves to a tracked item
+
+#### Scenario: Link a PR from the console
+
+- **WHEN** the operator runs the github link command with a pull request and work-item key
+- **THEN** the console records the PR ↔ work-item link, or reports a conflict

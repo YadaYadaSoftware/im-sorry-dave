@@ -28,3 +28,9 @@
 - [ ] 5.1 Unit tests for key detection, unresolved-key handling, and mapping/validity logic
 - [ ] 5.2 Integration test: open PR with key → link + posts + valid transition; merge → done transition
 - [ ] 5.3 Document the event→status mapping configuration and GitHub App setup
+
+## 6. Console commands
+
+- [ ] 6.1 Provide `github scan <pr>` and `github link <pr> <key>` handlers
+- [ ] 6.2 Provide `github apply-status <pr> <event>` handler over the transition logic
+- [ ] 6.3 Honor the global `--dry-run` for status-mutating commands

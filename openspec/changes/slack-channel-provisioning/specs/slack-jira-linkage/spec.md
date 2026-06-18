@@ -37,3 +37,17 @@ The system SHALL keep the channel's displayed context (topic and/or purpose) ali
 
 - **WHEN** a member views the channel
 - **THEN** the channel exposes a link back to the Jira work item (via topic, purpose, or pinned message)
+
+### Requirement: Console commands inspect and manage channel links
+
+The console application SHALL provide commands to link a channel to a work item and to show the channel linked to a work item.
+
+#### Scenario: Link a channel from the console
+
+- **WHEN** the operator runs the slack link command with a work-item key and channel id
+- **THEN** the console records the link, or reports a conflict if the channel is already linked elsewhere
+
+#### Scenario: Show a work item's channel
+
+- **WHEN** the operator runs the slack channel command for a work-item key
+- **THEN** the console prints the linked channel, or reports none

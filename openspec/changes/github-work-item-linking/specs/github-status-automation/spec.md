@@ -46,3 +46,17 @@ The system SHALL avoid redundant transitions and SHALL attribute automated trans
 
 - **WHEN** the system transitions a work item from a PR event
 - **THEN** the transition is recorded with a reference to the triggering pull request
+
+### Requirement: Console commands drive status transitions
+
+The console application SHALL provide a command to apply the configured PR-event status transition for a linked work item, supporting `--dry-run`.
+
+#### Scenario: Apply a transition from the console
+
+- **WHEN** the operator runs the github apply-status command for a linked pull request and event
+- **THEN** the console performs the mapped, workflow-valid transition, or reports it would under `--dry-run`
+
+#### Scenario: Invalid transition reported
+
+- **WHEN** the mapped target status is not a valid transition for the work item's current status
+- **THEN** the console reports that the transition was skipped

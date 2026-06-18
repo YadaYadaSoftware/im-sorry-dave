@@ -51,3 +51,17 @@ The system SHALL reflect OpenSpec task completion toward Jira where the generati
 
 - **WHEN** a generated item has been edited by a human in Jira
 - **THEN** regeneration does not overwrite the human-edited authoritative fields
+
+### Requirement: Console commands drive item generation
+
+The console application SHALL provide a command to generate/update Jira items from an OpenSpec change, supporting `--dry-run` for a no-write preview.
+
+#### Scenario: Generate items from the console
+
+- **WHEN** the operator runs the openspec generate command for a change
+- **THEN** the console creates/updates the parent and task items idempotently and reports what changed
+
+#### Scenario: Dry-run preview
+
+- **WHEN** the operator runs the openspec generate command with `--dry-run`
+- **THEN** the console reports the items it would create/update without writing to Jira

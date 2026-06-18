@@ -48,3 +48,17 @@ The system SHALL ensure relevant participants (e.g., assignee, reporter) have ac
 
 - **WHEN** a participant's Slack identity cannot be resolved
 - **THEN** the system continues provisioning without failing and records that the invite was skipped
+
+### Requirement: Console commands drive channel provisioning
+
+The console application SHALL provide commands to provision, archive, and unarchive a work item's Slack channel, invoking the same lifecycle services as the event-driven path.
+
+#### Scenario: Provision a channel from the console
+
+- **WHEN** the operator runs the slack provision command for a work-item key
+- **THEN** the console creates (or reports the existing) channel for that work item
+
+#### Scenario: Archive a channel from the console
+
+- **WHEN** the operator runs the slack archive command for a work-item key
+- **THEN** the console archives the linked channel, honoring `--dry-run`

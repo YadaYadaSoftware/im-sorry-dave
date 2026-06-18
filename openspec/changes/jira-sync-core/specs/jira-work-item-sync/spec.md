@@ -64,3 +64,22 @@ The system SHALL provide a mapping store that associates a work item with its ex
 
 - **WHEN** a resource is linked to a work item that is already linked to a different work item
 - **THEN** the system rejects the duplicate link and surfaces a conflict
+
+### Requirement: Console commands drive Jira sync and work-item inspection
+
+The console application SHALL provide commands to run a backfill, run a reconciliation sweep, and list/show mirrored work items, invoking the same sync services as the web host.
+
+#### Scenario: Backfill from the console
+
+- **WHEN** the operator runs the sync backfill command
+- **THEN** the console mirrors all tracked Jira work items and reports the count processed
+
+#### Scenario: Reconcile a time window
+
+- **WHEN** the operator runs the sync reconcile command with an optional since-time
+- **THEN** the console refreshes work items updated since that time and reports the count
+
+#### Scenario: Inspect a work item
+
+- **WHEN** the operator runs the work-item show command with a key
+- **THEN** the console prints the mirrored work item, or reports that it is not tracked

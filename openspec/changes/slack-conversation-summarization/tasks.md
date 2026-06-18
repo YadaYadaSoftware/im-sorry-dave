@@ -34,3 +34,9 @@
 - [ ] 6.1 Throttle/debounce automatic extraction and bound conversation-unit size
 - [ ] 6.2 Unit tests for capture dedupe, candidate grounding, and idempotent confirmation
 - [ ] 6.3 Integration test: conversation → extraction → confirm → Jira record (no duplicate on re-confirm)
+
+## 7. Console commands
+
+- [ ] 7.1 Provide a `summarize <key|channel> [--window]` handler that runs extraction and prints candidates
+- [ ] 7.2 Provide `candidates list <key>` and `candidates confirm/reject <id>` handlers
+- [ ] 7.3 Route console confirmations through `jira-decision-writeback`, honoring `--dry-run`
