@@ -83,3 +83,22 @@ The console application SHALL provide commands to run a backfill, run a reconcil
 
 - **WHEN** the operator runs the work-item show command with a key
 - **THEN** the console prints the mirrored work item, or reports that it is not tracked
+
+### Requirement: Configuration and secret handling
+
+The service SHALL read its Jira connection settings, webhook secret, and sync/database settings from layered configuration — committed `appsettings` defaults overridden by environment variables and, for local development, user-secrets — and SHALL keep secrets out of source control.
+
+#### Scenario: Settings resolved from layered providers
+
+- **WHEN** the service starts
+- **THEN** it resolves Jira, webhook, sync, and database settings from configuration, with environment variables and user-secrets overriding committed `appsettings` defaults
+
+#### Scenario: Real client selected only when credentials are present
+
+- **WHEN** the Jira base URL, email, and API token are all configured
+- **THEN** the service uses the real Jira REST client; otherwise it uses the in-memory fake client
+
+#### Scenario: Secrets are not committed
+
+- **WHEN** credentials are supplied
+- **THEN** they originate from environment variables or a secret store (or user-secrets in development), never from committed configuration files

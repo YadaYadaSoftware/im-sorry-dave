@@ -40,5 +40,12 @@
 ## 7. Validation
 
 - [x] 7.1 Unit tests for stale-event guard, idempotent write-back, and mapping uniqueness
-- [ ] 7.2 Integration test against a Jira test project (webhook → store → write-back round trip) — pending real Jira credentials; verified end-to-end against the in-memory fake client
+- [x] 7.2 Integration test against a Jira test project (webhook → store → write-back round trip) — credential-gated `JiraRoundTripIntegrationTests`; verified green against real Jira Cloud (issue MDP-7)
 - [x] 7.3 Document configuration and webhook registration steps
+
+## 8. Operations & verification
+
+- [x] 8.1 Support layered configuration (appsettings + environment variables + user-secrets) with `__`-nested env keys
+- [x] 8.2 Add a devops configuration/deployment README for the API (`src/SorryDave.JiraSync.Api/README.md`)
+- [x] 8.3 Credential-gated round-trip integration test reading Jira settings from user-secrets/env; runs when credentials are present, skips otherwise
+- [x] 8.4 Integration test leaves its decision comment on the test issue for inspection (each run uses a unique record identity)

@@ -24,6 +24,8 @@ This is the foundational change for a platform that connects Jira (source of tru
 - **Outbox + retry queue for write-back.** Records are persisted to an outbox first, then delivered to Jira with backoff; transient failures retry, permanent failures are flagged. Guarantees no decision is lost if Jira is briefly unavailable.
 - **Mapping store is the integration hub.** A single table keyed by (resourceType, resourceId) ↔ workItemKey, with uniqueness on resourceId. Downstream changes resolve work items through this store rather than each maintaining their own.
 - **Secrets via configuration provider.** Jira API token and webhook secret are read from the platform secret store (e.g., user-secrets in dev, a managed secret store in prod), never committed.
+- **Layered configuration.** Settings resolve from committed `appsettings` defaults, overridden by environment variables (with the ASP.NET Core `__` nesting convention for containers/CI) and, in development, user-secrets. The real Jira client is selected only when base URL + email + token are all present; otherwise the in-memory fake client runs so the service is usable with zero setup. Ops configuration is documented in the API's `README.md`.
+- **Round-trip verification against real Jira.** A credential-gated integration test exercises the full path (REST fetch → webhook envelope → store → write-back → read-back/edit verification) against a real Jira test project. It reads credentials from user-secrets/env and skips when they are absent, so the default test run needs no Jira access. It intentionally leaves its decision comment on the test issue for manual inspection (each run uses a unique record identity, so runs do not collide).
 
 ## Risks / Trade-offs
 
