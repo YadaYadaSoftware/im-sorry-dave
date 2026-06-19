@@ -33,11 +33,13 @@ existing Aspire AppHost with **`aspire deploy`**, using AWS credentials we suppl
 
 ## Impact
 
-- New dependency: `Aspire.Hosting.AWS` (AWS integration for the AppHost) and the AWS toolchain the
-  Aspire AWS deployer uses (ECR, and a container compute service — AWS App Runner or ECS Fargate).
-- New AWS account footprint: ECR repository, a container compute service with HTTPS, a secrets
-  store (AWS Secrets Manager / SSM), and a database (Amazon RDS) **or** a mounted volume (EFS),
-  per the persistence decision.
+- New dependency: `Aspire.Hosting.AWS` (13.x) and the AWS toolchain its deploy publisher uses — the
+  **AWS CDK CLI** (`aspire publish` emits CDK; `aspire deploy` runs `cdk deploy`). Deploy target is
+  **ECS Fargate** (App Runner is not supported). The deploy APIs are experimental.
+- New AWS account footprint: ECR repository, an **ECS Fargate** service behind an **ALB + ACM
+  certificate** (custom domain) for public HTTPS, a secrets store (AWS Secrets Manager), and a
+  database — **Amazon RDS for PostgreSQL** (recommended) or an EFS volume for SQLite. RDS/EFS aren't
+  auto-provisioned by the integration, so they're added via CDK.
 - Possible code change: if we choose a managed database, the EF Core provider moves from SQLite to
   PostgreSQL (Npgsql) — the EF model is provider-agnostic, but this touches the connection setup and
   the SQLite-specific in-memory query workarounds in `jira-sync-core`.

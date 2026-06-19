@@ -29,7 +29,8 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 app.MapDefaultEndpoints(); // /health and /alive (used by Aspire health-gated startup)
-app.MapGet("/", () => Results.Redirect("/swagger"));
+// Root returns 200 (load-balancer health checks hit "/"); Swagger UI is at /swagger.
+app.MapGet("/", () => Results.Ok(new { service = "jira-sync-core", status = "ok", swagger = "/swagger" }));
 
 app.MapWebhookEndpoints();
 app.MapWorkItemEndpoints();

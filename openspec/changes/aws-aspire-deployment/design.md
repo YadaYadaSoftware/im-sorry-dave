@@ -25,69 +25,78 @@ Database for PostgreSQL** is low-friction.
 
 ## Decisions
 
-- **Aspire AppHost is the deploy driver, AWS via `Aspire.Hosting.AWS`.** Add the AWS hosting
-  integration to the AppHost and target AWS so `aspire deploy` orchestrates build → ECR push →
-  compute update. *Honesty note:* Aspire's most mature deploy path is Azure (`azd`); the AWS path
-  goes through `Aspire.Hosting.AWS` + the AWS toolchain (ECR + CDK/App Runner/ECS). If `aspire
-  deploy` to AWS proves immature for our compute target, the near fallback is the same image
-  published to ECR and deployed via the AWS CDK/CLI the integration generates; the broader fallback
-  is to deploy to **Azure** (Aspire's most mature target) since that's the eventual home anyway. The
-  `aspire deploy` UX stays the goal. This is the main risk to validate early (see Open Questions).
+- **`aspire deploy` → AWS CDK → ECS Fargate (verified).** `Aspire.Hosting.AWS` (13.x) added
+  publish/deploy support: `aspire publish` transforms the app into AWS CDK constructs synthesized to
+  `cdk.out`; `aspire deploy` runs publish then shells out to `cdk deploy`. So `aspire deploy` is the
+  real mechanism (it pushes the image to ECR and provisions ECS via CloudFormation). Web projects
+  deploy to **ECS Fargate** — an "Express Service" by default, or **ECS Fargate behind an
+  Application Load Balancer**. **AWS App Runner is NOT a supported target** (our earlier App-Runner
+  plan is dropped). The deploy APIs are **experimental**, gated behind
+  `#pragma warning disable ASPIREAWSPUBLISHERS001`. *Risk/fallback:* preview-grade feature — if it
+  blocks us, the eventual-Azure target (Aspire's most mature deploy path) is the sanctioned fallback.
 
-- **Compute + persistence are coupled — pick one pairing:**
-  - **(A, recommended) AWS App Runner + Amazon RDS for PostgreSQL.** App Runner takes a container
-    from ECR and gives managed HTTPS + a stable URL with the least infra. But App Runner has **no
-    persistent volume**, so SQLite is not viable there — it forces a managed DB. We move the EF
-    Core provider from SQLite to **Npgsql (PostgreSQL)** (the EF model is provider-agnostic; this
-    also lets us drop the SQLite-specific in-memory `DateTimeOffset` query workarounds). Cleanest
-    managed result; durable; scale-ready later.
-  - **(B) ECS Fargate + EFS-mounted SQLite.** Keeps SQLite (no code change) by mounting EFS for the
-    DB file, but needs more infra: ALB + ACM certificate for HTTPS, EFS, ECS service/task defs.
-    More moving parts; SQLite still caps us at one instance.
-  - **Lean:** App Runner + RDS Postgres for a clean managed service — and, given Azure is the
-    eventual home, the **portable** choice: a plain container + PostgreSQL maps directly onto Azure
-    Container Apps + Azure Database for PostgreSQL, whereas ECS+EFS+SQLite is AWS-locked. ECS+EFS+
-    SQLite remains the no-code-change interim if we want to defer the provider swap. Decided with
-    the user.
+- **Public HTTPS via ALB + ACM, in `us-east-1` (decided).** Webhooks need HTTPS. We run **ECS
+  Fargate behind an ALB terminating TLS with an ACM certificate** on a **domain we control**, in
+  region **`us-east-1`**. ACM DNS-validation records and an ALB alias are wired for that domain
+  (cleanest if the domain is in Route 53; external DNS works too with manual records). *Rejected
+  alternative:* CloudFront `*.cloudfront.net` (no-domain fallback) — not needed since a domain is
+  available.
 
-- **Registry: Amazon ECR.** Standard target for the built image.
+- **Persistence: EFS-mounted SQLite (decided).** `Aspire.Hosting.AWS` does not provision storage
+  out of the box, so we add an **EFS file system via CDK** and mount it on the Fargate task so the
+  SQLite file (`jirasync.db`) persists across restarts/redeploys. **No EF provider change** — the
+  current SQLite setup ships as-is. *Trade-off accepted:* this is **AWS-locked** — EFS+SQLite does
+  not port to Azure, so the eventual Azure move will switch persistence then (likely to Azure
+  Database for PostgreSQL via Npgsql). *Rejected for now:* RDS for PostgreSQL (portable but needs
+  the Npgsql swap). **Reinforces single-instance:** concurrent Fargate tasks writing one SQLite
+  file over EFS would lock/corrupt it, so exactly one task is mandatory (not just for the outbox).
+
+- **Registry: Amazon ECR.** The CDK deploy pushes the built image here.
 
 - **Single instance in v1.** The reconciliation sweep and write-back outbox sender are
   single-writer: two instances draining the same outbox could double-post a comment before either
-  marks it Sent (idempotency dedups at submit, not at send). So pin to one instance (App Runner
-  min=max=1, or ECS desiredCount=1). Scale-out later needs a lock/leader-election or moving the
-  outbox to a queue.
+  marks it Sent (idempotency dedups at submit, not at send). So pin the ECS service to
+  `desiredCount=1`. Scale-out later needs a lock/leader-election or moving the outbox to a queue.
 
 - **Secrets via AWS Secrets Manager.** Jira token, Slack bot token, and signing secret live in
   Secrets Manager and are injected as configuration/environment at runtime. Nothing secret in the
   image or repo. Local dev keeps using user-secrets.
 
-- **Console excluded from deploy.** The console resource is already `WithExplicitStart`; for publish
-  it is marked so the AWS deployer does not containerize/deploy it. Only the API ships.
+- **Console excluded from deploy.** Only the API ships. The exclusion mechanism for the CDK
+  publisher isn't documented yet — likely by not including the console resource in the deployable
+  set (e.g., a deploy-time AppHost configuration or a separate AppHost entry that registers only the
+  API). To be confirmed during the de-risk deploy; the executable-console resource must not become
+  an ECS service.
 
 ## Risks / Trade-offs
 
-- [`aspire deploy` AWS maturity] → Validate a minimal deploy first; fall back to ECR + CDK/CLI from the integration while keeping the `aspire deploy` goal.
-- [SQLite in a container] → Not durable on App Runner; addressed by RDS (option A) or EFS (option B).
-- [Provider swap to Npgsql (option A)] → EF model is provider-agnostic, but touches connection setup, migrations, and the SQLite-only query workarounds; needs a Postgres migration set and a test pass.
-- [Concurrent writers if scaled] → Pin to single instance; document the constraint.
-- [Secret handling] → Secrets Manager + IAM; never in image; plan rotation.
-- [Cost] → ECR + App Runner/ECS + RDS/EFS incur ongoing cost; size minimally for v1.
+- [`aspire deploy` AWS is experimental/preview] → Validate a minimal deploy first (the `cdk deploy` it shells to can also be run directly); if it blocks us, fall back to Azure (the eventual home).
+- [No built-in RDS/EFS provisioning] → Add the datastore via a CDK construct in the AppHost, or pre-provision it and inject the connection string from Secrets Manager.
+- [HTTPS needs a domain] → ALB + ACM requires a domain we control; CloudFront is the no-domain fallback. Decide before deploy.
+- [Provider swap to Npgsql] → EF model is provider-agnostic, but touches connection setup, migrations, and the SQLite-only query workarounds; needs a Postgres migration set and a test pass.
+- [Concurrent writers if scaled] → Pin ECS `desiredCount=1`; document the constraint.
+- [Secret handling] → Secrets Manager + IAM task role; never in image; plan rotation.
+- [Cost] → ECR + ECS Fargate + ALB + RDS incur ongoing cost; size minimally for v1.
 
 ## Migration Plan
 
-1. Add `Aspire.Hosting.AWS` to the AppHost; configure the AWS target (region, profile/credentials) and ECR.
-2. Make the API container-publishable; mark the console resource excluded from publish.
-3. Apply the chosen persistence: (A) add Npgsql provider + Postgres migrations + RDS connection from Secrets Manager, or (B) wire EFS-mounted SQLite on ECS.
-4. Move secrets to AWS Secrets Manager; map them to the API's configuration.
-5. Run `aspire deploy` with AWS credentials; confirm `GET /health` over the public HTTPS URL.
-6. Register the Jira webhook against the public URL; verify a live event round-trips. (Slack wiring follows in its own changes.)
-- *Rollback:* tear down the AWS resources the deploy created; local dev is unaffected.
+1. **De-risk first:** add `Aspire.Hosting.AWS` (13.x) to the AppHost, enable the experimental
+   publishers pragma, and run a **minimal `aspire deploy`** of just the API to ECS Fargate to
+   confirm the CDK path, image push to ECR, and how to exclude the console. (Requires AWS creds + the AWS CDK CLI.)
+2. Make the API container-publishable; ensure only the API becomes an ECS service (console excluded).
+3. Add the datastore via CDK: provision **RDS for PostgreSQL**, add the Npgsql provider + Postgres migrations, and inject the connection string from Secrets Manager. (Or EFS+SQLite fallback.)
+4. Add the **ALB + ACM certificate** (and domain/DNS) for public HTTPS; pin ECS `desiredCount=1`.
+5. Move secrets to AWS Secrets Manager; map them to the API's configuration via the task role.
+6. Run `aspire deploy`; confirm `GET /health` over the public HTTPS URL.
+7. Register the Jira webhook against the public URL; verify a live event round-trips. (Slack wiring follows in its own changes.)
+- *Rollback:* `cdk destroy` / tear down the stack the deploy created; local dev is unaffected.
 
 ## Open Questions
 
-- **Compute/persistence pairing:** App Runner + RDS Postgres (recommended, needs Npgsql swap) vs. ECS Fargate + EFS + SQLite (no code change, more infra)?
-- AWS **region**, and a **custom domain** (Route53 + ACM) vs. the default App Runner/ALB hostname?
-- How mature is `aspire deploy` for our AWS compute target today — does it need the AWS CDK/toolkit underneath? (If it's too rough, switch to the Azure target, which is the eventual home.)
-- Credentials at deploy: long-lived access key/secret vs. an assumed role/profile.
-- Timing of the eventual Azure move — deploy AWS now and port later, or go straight to Azure if the AWS path stalls?
+- The exact **domain/subdomain** to use (e.g., `dave.example.com`) and whether it is hosted in **Route 53** (enables automated ACM DNS validation + ALB alias) or external DNS (manual records).
+- Credentials at deploy: long-lived access key/secret (you'll provide) vs. an assumed role/profile.
+- Timing of the eventual Azure move — deploy AWS now and port later, or go straight to Azure if the experimental AWS path stalls?
+
+**Resolved:** compute **ECS Fargate** via `aspire deploy`/CDK; persistence **EFS-mounted SQLite**
+(no provider change, AWS-locked); public HTTPS via **ALB + ACM on a controlled domain**; region
+**`us-east-1`**; **single instance**.
