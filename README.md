@@ -9,11 +9,20 @@ conversations back into Jira. Planned capabilities live as OpenSpec changes unde
 
 | Capability (OpenSpec change) | State |
 |---|---|
-| `jira-sync-core` | **Implemented** (this solution) |
-| `slack-channel-provisioning` | Proposed |
-| `slack-conversation-summarization` | Proposed |
+| `jira-sync-core` | **Implemented** (archived) |
+| `aspire-apphost` | **Implemented** (archived) — AppHost + ServiceDefaults + console-as-API-client |
+| `tui-smoke-test` | **Implemented** (archived) — interactive smoke TUI |
+| `slack-channel-provisioning` | Proposed (decision-complete) |
+| `slack-conversation-summarization` | Proposed (decision-complete) |
+| `aws-aspire-deployment` | Proposed — deploy via `aspire deploy` to AWS; **Azure is the eventual home** (portable container + PostgreSQL) |
 | `github-work-item-linking` | Proposed |
 | `openspec-jira-linking` | Proposed |
+| `console-control-app` | Proposed |
+
+> **Hosting direction:** AWS is the interim deployment target; the platform is **eventually
+> destined for Azure**. The deployment is kept portable (provider-agnostic container + PostgreSQL)
+> so moving to Azure Container Apps + Azure Database for PostgreSQL — or falling back to Azure if
+> the AWS `aspire deploy` path stalls — is low-friction. See `openspec/changes/aws-aspire-deployment`.
 
 ## jira-sync-core
 

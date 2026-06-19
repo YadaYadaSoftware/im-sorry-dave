@@ -19,18 +19,23 @@ The system SHALL require human confirmation in Slack before any decision or answ
 - **WHEN** a participant edits a candidate's text before confirming
 - **THEN** the system writes back the edited content, attributed to the confirming user
 
-### Requirement: On-demand summarization command
+### Requirement: Explicit summarization triggers
 
-The system SHALL provide a Slack command that summarizes the current thread or channel on demand and presents candidates for confirmation.
+The system SHALL summarize a conversation only on an explicit trigger — a Slack slash command, or reacting to a message/thread with a configured emoji — and present the resulting candidates for confirmation. Fully automatic (unsolicited) extraction is out of scope for this version.
 
-#### Scenario: Manual summarize invoked
+#### Scenario: Summarize command invoked
 
 - **WHEN** a user invokes the summarize command in a work-item channel
 - **THEN** the system runs extraction over the relevant conversation window and presents the resulting candidates in the channel
 
-#### Scenario: Command used in unlinked channel
+#### Scenario: Summarize via emoji reaction
 
-- **WHEN** the summarize command is invoked in a channel not linked to a work item
+- **WHEN** a user reacts to a message or thread in a work-item channel with the configured summarize emoji
+- **THEN** the system runs extraction over that thread/window and presents the resulting candidates
+
+#### Scenario: Trigger used in unlinked channel
+
+- **WHEN** a summarize trigger fires in a channel not linked to a work item
 - **THEN** the system responds that the channel is not linked and performs no write-back
 
 ### Requirement: Write-back is idempotent and attributed

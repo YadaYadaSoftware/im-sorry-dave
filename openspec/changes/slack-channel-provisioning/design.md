@@ -95,10 +95,11 @@ intended mechanism rather than post-hoc conversion.
 ### Supporting decisions
 
 - **Archive, never delete.** Closed work items archive their channel to preserve history; reopening unarchives. *Alternative:* delete on close — rejected (loses conversation history that may still be referenced).
-- **Deterministic naming from the work-item key.** Channel name derives from the Jira key (e.g., `mdp-5-express-checkout`) normalized to Slack rules, with a deterministic suffix on collision. Discoverable and idempotent to provision. *Alternative:* random names — rejected (undiscoverable, hard to dedupe).
+- **Deterministic naming: `<jira-key>-<short-summary-slug>`.** The channel name is the Jira key, a hyphen, and a short slug of the work item's summary (e.g., MDP-7 "Build Slack Channel" → `mdp-7-build-slack-channel`). Normalized to Slack rules: lowercased (Slack requires lowercase), non-alphanumeric runs collapsed to single hyphens, trimmed, with the **key always preserved** and the **summary slug truncated** so the full name fits Slack's 80-char limit. A deterministic suffix is appended on collision. *Why:* the key guarantees discoverability/dedup; the slug makes it human-readable. *Alternative:* random names — rejected (undiscoverable, hard to dedupe).
 - **Driven by Jira events from the core.** Lifecycle and context updates react to work-item created/status-changed/assignee-changed signals from `jira-work-item-sync`, not Slack polling.
 - **Identity resolution is best-effort.** Map Jira users to Slack users by email where available; if unresolved, continue without failing and record the skip. *Alternative:* hard-require mapping — rejected (would block provisioning).
 - **Context reflected via topic/purpose + pinned message.** Status/assignee in the topic; Jira link pinned. Low-noise; avoids spamming on every minor change.
+- **Build against the real Slack Web API — no seeded fake.** Unlike the Jira client's in-memory fallback, the Slack client targets a real workspace; provisioning requires a configured bot token. Unit tests use an `ISlackClient` test double, and a credential-gated integration test covers the real create → seed → archive round-trip. *Why:* validate directly against Slack rather than a simulated workspace. *Trade-off:* the service can't be exercised end-to-end without Slack credentials (accepted).
 
 ## Risks / Trade-offs
 
@@ -119,7 +120,8 @@ intended mechanism rather than post-hoc conversion.
 
 ## Open Questions
 
-- Naming convention details (prefix, slug length) and whether to include the summary slug.
+- None outstanding for this change.
 
 **Resolved:** channels are **public** by default (private per-item override deferred); the first
-provisioning trigger is **explicit request** (auto-on-active-status deferred).
+provisioning trigger is **explicit request** (auto-on-active-status deferred); channel naming is
+**`<jira-key>-<short-summary-slug>`**, Slack-normalized with the key preserved.

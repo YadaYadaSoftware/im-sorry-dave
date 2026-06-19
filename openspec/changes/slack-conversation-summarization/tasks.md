@@ -12,15 +12,15 @@
 
 ## 3. Claude extraction
 
-- [ ] 3.1 Add the Anthropic Claude API client and model/effort configuration
+- [ ] 3.1 Add the Anthropic Claude API client and model config (default `claude-opus-4-8`, configurable to `claude-haiku-4-5`)
 - [ ] 3.2 Define structured-output schema for decision/answer/summary candidates with evidence + confidence
 - [ ] 3.3 Implement extraction over a conversation unit (thread or bounded channel window)
-- [ ] 3.4 Apply the redaction/consent policy to inputs and outputs
+- [ ] 3.4 Apply baseline redaction (on by default, configurable patterns) to both Claude inputs and Jira outputs
 
 ## 4. Confirmation & commands
 
 - [ ] 4.1 Present candidates in Slack as interactive messages (confirm / edit / reject)
-- [ ] 4.2 Implement the on-demand summarize slash command (thread/channel window)
+- [ ] 4.2 Implement the explicit summarize triggers: slash command and the configured emoji-reaction cue (thread/channel window)
 - [ ] 4.3 Handle the command/confirmation in unlinked channels gracefully
 
 ## 5. Write-back integration
@@ -31,7 +31,7 @@
 
 ## 6. Cost control & validation
 
-- [ ] 6.1 Throttle/debounce automatic extraction and bound conversation-unit size
+- [ ] 6.1 Bound conversation-unit size and throttle extraction calls to control Claude cost
 - [ ] 6.2 Unit tests for capture dedupe, candidate grounding, and idempotent confirmation
 - [ ] 6.3 Integration test: conversation → extraction → confirm → Jira record (no duplicate on re-confirm)
 

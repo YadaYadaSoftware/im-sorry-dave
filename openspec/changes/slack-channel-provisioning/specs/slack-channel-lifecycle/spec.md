@@ -2,13 +2,18 @@
 
 ### Requirement: Provision a channel lazily on explicit request
 
-The system SHALL create a Slack channel for a work item only on an explicit request to discuss it — not for every tracked item — and only for configured discussion-worthy issue types. An explicit request is a console/slash command, a "Discuss in Slack" action, or a bot @mention of the item. Provisioned channels SHALL be public by default. The channel name is derived deterministically from the work item key and the channel is seeded with the work item's context.
+The system SHALL create a Slack channel for a work item only on an explicit request to discuss it — not for every tracked item — and only for configured discussion-worthy issue types. An explicit request is a console/slash command, a "Discuss in Slack" action, or a bot @mention of the item. Provisioned channels SHALL be public by default. The channel name SHALL be the work-item key followed by a hyphen and a short slug of the work item's summary, normalized to Slack's naming rules, and the channel is seeded with the work item's context.
 
 #### Scenario: Channel created on explicit request
 
 - **WHEN** an explicit request fires for an eligible work item that has no linked channel
-- **THEN** the system creates a public Slack channel whose name incorporates the work item key (normalized to Slack naming rules)
+- **THEN** the system creates a public Slack channel named `<jira-key>-<short-summary-slug>`
 - **AND** posts an initial context message containing the key, summary, type, status, assignee, and a link to the Jira issue
+
+#### Scenario: Channel name normalized to Slack rules
+
+- **WHEN** the channel name is derived (e.g., MDP-7 "Build Slack Channel")
+- **THEN** it is lowercased with non-alphanumeric runs reduced to single hyphens (e.g., `mdp-7-build-slack-channel`), the work-item key is preserved, and the summary slug is truncated so the whole name stays within Slack's length limit
 
 #### Scenario: No channel for untriggered or out-of-scope items
 
