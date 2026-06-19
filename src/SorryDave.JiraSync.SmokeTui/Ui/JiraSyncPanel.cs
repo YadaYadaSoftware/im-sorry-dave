@@ -5,7 +5,8 @@ namespace SorryDave.JiraSync.SmokeTui.Ui;
 
 /// <summary>
 /// Drives the jira-sync-core happy path through the API: backfill, simulate an inbound webhook,
-/// submit a write-back, and view work items, the outbox, and Jira comments. All calls go over
+/// submit a write-back, and view work items, the outbox, and Jira comments. Write-back and the
+/// webhook simulation target the work item currently selected in the list. All calls go over
 /// HTTP off the UI thread, with results marshalled back via the main loop.
 /// </summary>
 public class JiraSyncPanel : View
@@ -15,6 +16,10 @@ public class JiraSyncPanel : View
     private readonly ListView _outbox = new() { AllowsMarking = false };
     private readonly ListView _comments = new() { AllowsMarking = false };
 
+    // The work items currently shown, index-aligned with the _workItems list view, so the
+    // selected row maps back to a real work item.
+    private List<WorkItemDto> _items = new();
+
     public JiraSyncPanel(IApiClient api)
     {
         _api = api;
@@ -23,13 +28,12 @@ public class JiraSyncPanel : View
         backfill.Clicked += () => RunInBackground(ct => _api.BackfillAsync(ct), "Backfill");
 
         var webhook = new Button("Simulate _webhook") { X = Pos.Right(backfill) + 1, Y = 0 };
-        webhook.Clicked += () => RunInBackground(async ct =>
+        webhook.Clicked += () =>
         {
-            var items = await _api.GetWorkItemsAsync(ct);
-            var target = items.FirstOrDefault(i => !i.IsDeleted)
-                         ?? throw new InvalidOperationException("No work item yet — click Backfill first.");
-            await _api.SimulateWebhookAsync(target, ct);
-        }, "Simulate webhook");
+            var target = SelectedItem();
+            if (target is null) { NoSelection("Simulate webhook"); return; }
+            RunInBackground(ct => _api.SimulateWebhookAsync(target, ct), "Simulate webhook");
+        };
 
         var write = new Button("_Submit write-back") { X = Pos.Right(webhook) + 1, Y = 0 };
         write.Clicked += SubmitWriteBack;
@@ -37,7 +41,7 @@ public class JiraSyncPanel : View
         var refresh = new Button("_Refresh") { X = Pos.Right(write) + 1, Y = 0 };
         refresh.Clicked += Refresh;
 
-        var wiLabel = new Label("Work items:") { X = 0, Y = 2 };
+        var wiLabel = new Label("Work items (select one, then Submit write-back / Simulate webhook):") { X = 0, Y = 2 };
         _workItems.X = 0; _workItems.Y = 3; _workItems.Width = Dim.Fill(); _workItems.Height = Dim.Percent(34);
 
         var obLabel = new Label("Write-back outbox:") { X = 0, Y = Pos.Bottom(_workItems) };
@@ -47,6 +51,13 @@ public class JiraSyncPanel : View
         _comments.X = 0; _comments.Y = Pos.Bottom(cmLabel); _comments.Width = Dim.Fill(); _comments.Height = Dim.Fill();
 
         Add(backfill, webhook, write, refresh, wiLabel, _workItems, obLabel, _outbox, cmLabel, _comments);
+    }
+
+    /// <summary>The work item highlighted in the list, or null if there are none.</summary>
+    private WorkItemDto? SelectedItem()
+    {
+        var index = _workItems.SelectedItem;
+        return index >= 0 && index < _items.Count ? _items[index] : null;
     }
 
     /// <summary>Reload all three lists from the API.</summary>
@@ -61,8 +72,9 @@ public class JiraSyncPanel : View
 
     private async Task LoadAsync()
     {
-        var items = (await _api.GetWorkItemsAsync())
-            .Select(w => $"{w.Key}  [{w.Status}]  {w.Summary}  ({(w.IsDeleted ? "deleted" : w.AssigneeDisplayName ?? "unassigned")})")
+        var items = (await _api.GetWorkItemsAsync()).ToList();
+        var itemLines = items
+            .Select(w => $"{w.Key}  [{w.Status}]  {w.Summary}  ({w.AssigneeDisplayName ?? "unassigned"})")
             .ToList();
 
         var outbox = (await _api.GetWriteBacksAsync())
@@ -76,7 +88,8 @@ public class JiraSyncPanel : View
 
         Application.MainLoop.Invoke(() =>
         {
-            _workItems.SetSource(items.Count > 0 ? items : new List<string> { "(none — click Backfill)" });
+            _items = items;
+            _workItems.SetSource(itemLines.Count > 0 ? itemLines : new List<string> { "(none — click Backfill)" });
             _outbox.SetSource(outbox.Count > 0 ? outbox : new List<string> { "(none)" });
             _comments.SetSource(comments.Count > 0 ? comments : new List<string> { "(none)" });
         });
@@ -84,6 +97,9 @@ public class JiraSyncPanel : View
 
     private void SubmitWriteBack()
     {
+        var target = SelectedItem();
+        if (target is null) { NoSelection("Submit write-back"); return; }
+
         var input = new TextField("") { X = 1, Y = 1, Width = Dim.Fill() - 2 };
         var submitted = false;
         var ok = new Button("Submit") { IsDefault = true };
@@ -91,7 +107,7 @@ public class JiraSyncPanel : View
         var cancel = new Button("Cancel");
         cancel.Clicked += () => Application.RequestStop();
 
-        var dialog = new Dialog("Submit write-back", 64, 8, ok, cancel);
+        var dialog = new Dialog($"Write-back to {target.Key} — {target.Summary}", 70, 8, ok, cancel);
         dialog.Add(new Label("Decision text:") { X = 1, Y = 0 }, input);
         Application.Run(dialog);
 
@@ -101,9 +117,6 @@ public class JiraSyncPanel : View
 
         RunInBackground(async ct =>
         {
-            var items = await _api.GetWorkItemsAsync(ct);
-            var target = items.FirstOrDefault(i => !i.IsDeleted)
-                         ?? throw new InvalidOperationException("No work item yet — click Backfill first.");
             await _api.SubmitWriteBackAsync(target.Key,
                 new WriteBackRequest($"tui-{Guid.NewGuid():N}", "Decision", text!, "tui://smoke", "SmokeTui"), ct);
             await _api.DrainWriteBackAsync(ct); // deliver now so the result is visible
@@ -126,6 +139,9 @@ public class JiraSyncPanel : View
             }
         });
     }
+
+    private static void NoSelection(string label)
+        => MessageBox.ErrorQuery(label, "Select a work item in the list first (click it or use the arrow keys). Click Backfill if the list is empty.", "OK");
 
     private void ShowError(string label, Exception ex)
     {

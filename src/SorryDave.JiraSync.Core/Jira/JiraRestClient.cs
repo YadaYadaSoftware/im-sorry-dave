@@ -35,14 +35,22 @@ public class JiraRestClient : IJiraClient
 
     public async Task<IReadOnlyList<JiraIssueData>> SearchAsync(string jql, CancellationToken ct = default)
     {
+        // Jira Cloud removed GET /rest/api/3/search (410 Gone, Atlassian CHANGE-2046). Use the
+        // new POST /rest/api/3/search/jql, which paginates by nextPageToken (no startAt/total).
         var results = new List<JiraIssueData>();
-        var startAt = 0;
-        const int pageSize = 100;
+        string? nextPageToken = null;
 
-        while (true)
+        do
         {
-            var url = $"rest/api/3/search?jql={Uri.EscapeDataString(jql)}&fields={Fields}&startAt={startAt}&maxResults={pageSize}";
-            using var response = await _http.GetAsync(url, ct);
+            var payload = new Dictionary<string, object?>
+            {
+                ["jql"] = jql,
+                ["maxResults"] = 100,
+                ["fields"] = Fields.Split(',')
+            };
+            if (nextPageToken is not null) payload["nextPageToken"] = nextPageToken;
+
+            using var response = await _http.PostAsJsonAsync("rest/api/3/search/jql", payload, ct);
             await EnsureSuccess(response, "search issues");
 
             using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
@@ -52,10 +60,12 @@ public class JiraRestClient : IJiraClient
                 foreach (var issue in issues.EnumerateArray())
                     results.Add(JiraIssueParser.Parse(issue));
 
-            var total = root.TryGetProperty("total", out var t) ? t.GetInt32() : results.Count;
-            startAt += pageSize;
-            if (startAt >= total || !issues.EnumerateArray().Any()) break;
+            var isLast = root.TryGetProperty("isLast", out var last) && last.ValueKind == JsonValueKind.True;
+            nextPageToken = !isLast && root.TryGetProperty("nextPageToken", out var tok) && tok.ValueKind == JsonValueKind.String
+                ? tok.GetString()
+                : null;
         }
+        while (nextPageToken is not null);
 
         return results;
     }
