@@ -6,10 +6,11 @@
 
 ## 2. Channel provisioning
 
-- [ ] 2.1 Derive a deterministic channel name from the work-item key (Slack-normalized)
-- [ ] 2.2 Create the channel and post the initial work-item context message
-- [ ] 2.3 Resolve name collisions with a deterministic suffix and record the actual channel
-- [ ] 2.4 Make provisioning idempotent (no duplicate channel when one is already linked)
+- [ ] 2.1 Implement lazy provisioning: trigger on explicit request/@mention or active-status transition, scoped to configured issue types (no channel for untriggered/out-of-scope items)
+- [ ] 2.2 Derive a deterministic channel name from the work-item key (Slack-normalized)
+- [ ] 2.3 Create the channel and post the initial work-item context message
+- [ ] 2.4 Resolve name collisions with a deterministic suffix and record the actual channel
+- [ ] 2.5 Make provisioning idempotent (no duplicate channel when one is already linked)
 
 ## 3. Linkage
 

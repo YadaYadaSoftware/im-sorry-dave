@@ -4,7 +4,7 @@ Team conversations about work happen in Slack, but there is no consistent, disco
 
 ## What Changes
 
-- Automatically provision a Slack channel for each tracked Jira work item, named and described from the work item.
+- Provision a dedicated Slack channel per work item **lazily** — only when the item is first discussed (an explicit request/@mention) or becomes active — and only for discussion-worthy issue types (for `MDP`, Ideas). We use a channel per item, not a thread, so each conversation maps cleanly to one work item for write-back (see design.md for the full channel-vs-thread rationale).
 - Seed each new channel with the work item's context (key, summary, type, status, assignee, link to Jira) and keep that context current as Jira changes.
 - Maintain a durable, unique link between the Slack channel and the work item (stored via the core mapping store).
 - Manage channel lifecycle: archive (not delete) the channel when the work item is completed/closed, and re-activate if the item reopens.
