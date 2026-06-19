@@ -1,16 +1,16 @@
 {
   "version": "48.0.0",
   "files": {
-    "8918fdbd216fd967abfb956495da1c6dee1acb43484a7b29483052745dfcf50b": {
+    "504e535a836c6238c07ba1c9aeb150cb58e5b1b433986af1a75d248158a57cd5": {
       "displayName": "aws2 Template",
       "source": {
         "path": "aws2.template.json",
         "packaging": "file"
       },
       "destinations": {
-        "991795635857-us-east-1-1bbaa051": {
+        "991795635857-us-east-1-3bde7e0a": {
           "bucketName": "cdk-hnb659fds-assets-991795635857-us-east-1",
-          "objectKey": "8918fdbd216fd967abfb956495da1c6dee1acb43484a7b29483052745dfcf50b.json",
+          "objectKey": "504e535a836c6238c07ba1c9aeb150cb58e5b1b433986af1a75d248158a57cd5.json",
           "region": "us-east-1",
           "assumeRoleArn": "arn:${AWS::Partition}:iam::991795635857:role/cdk-hnb659fds-file-publishing-role-991795635857-us-east-1"
         }
@@ -18,19 +18,19 @@
     }
   },
   "dockerImages": {
-    "24e140825aefb5547ffbf9d547e8bd2c158edfaaacc6c28fe33af87a41bfc5fd": {
+    "7be6988bb996fbf840d24599ad9490b7c571cad8a32dade7b30afec8a123571a": {
       "displayName": "Project-api/TaskDef/web/Tarball",
       "source": {
         "executable": [
           "powershell",
           "-Command",
-          "docker load -i asset.24e140825aefb5547ffbf9d547e8bd2c158edfaaacc6c28fe33af87a41bfc5fd.tar | ForEach-Object { ($_ -replace \u0027^Loaded image: \u0027, \u0027\u0027) }"
+          "docker load -i asset.7be6988bb996fbf840d24599ad9490b7c571cad8a32dade7b30afec8a123571a.tar | ForEach-Object { ($_ -replace \u0027^Loaded image: \u0027, \u0027\u0027) }"
         ]
       },
       "destinations": {
-        "991795635857-us-east-1-e14b3890": {
+        "991795635857-us-east-1-f6037dd8": {
           "repositoryName": "cdk-hnb659fds-container-assets-991795635857-us-east-1",
-          "imageTag": "24e140825aefb5547ffbf9d547e8bd2c158edfaaacc6c28fe33af87a41bfc5fd",
+          "imageTag": "7be6988bb996fbf840d24599ad9490b7c571cad8a32dade7b30afec8a123571a",
           "region": "us-east-1",
           "assumeRoleArn": "arn:${AWS::Partition}:iam::991795635857:role/cdk-hnb659fds-image-publishing-role-991795635857-us-east-1"
         }

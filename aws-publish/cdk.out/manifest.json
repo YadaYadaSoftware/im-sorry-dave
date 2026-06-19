@@ -18,7 +18,7 @@
         "validateOnSynth": false,
         "assumeRoleArn": "arn:${AWS::Partition}:iam::991795635857:role/cdk-hnb659fds-deploy-role-991795635857-us-east-1",
         "cloudFormationExecutionRoleArn": "arn:${AWS::Partition}:iam::991795635857:role/cdk-hnb659fds-cfn-exec-role-991795635857-us-east-1",
-        "stackTemplateAssetObjectUrl": "s3://cdk-hnb659fds-assets-991795635857-us-east-1/8918fdbd216fd967abfb956495da1c6dee1acb43484a7b29483052745dfcf50b.json",
+        "stackTemplateAssetObjectUrl": "s3://cdk-hnb659fds-assets-991795635857-us-east-1/504e535a836c6238c07ba1c9aeb150cb58e5b1b433986af1a75d248158a57cd5.json",
         "requiresBootstrapStackVersion": 6,
         "bootstrapStackVersionSsmParameter": "/cdk-bootstrap/hnb659fds/version",
         "additionalDependencies": [
@@ -284,6 +284,42 @@
           {
             "type": "aws:cdk:logicalId",
             "data": "DaveAlias64005A5B"
+          }
+        ],
+        "/aws2/DaveEfs/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "DaveEfsE9C21F64"
+          }
+        ],
+        "/aws2/DaveEfs/EfsSecurityGroup/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "DaveEfsEfsSecurityGroup638CB77E"
+          }
+        ],
+        "/aws2/DaveEfs/EfsSecurityGroup/from aws2DefaultECSClusterSecurityGroup212C401D:2049": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "DaveEfsEfsSecurityGroupfromaws2DefaultECSClusterSecurityGroup212C401D20492E750810"
+          }
+        ],
+        "/aws2/DaveEfs/EfsMountTarget1": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "DaveEfsEfsMountTarget17D702C63"
+          }
+        ],
+        "/aws2/DaveEfs/EfsMountTarget2": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "DaveEfsEfsMountTarget23C4C19A4"
+          }
+        ],
+        "/aws2/DaveEfs/DaveAp/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "DaveEfsDaveApF00FA551"
           }
         ],
         "/aws2/CDKMetadata/Default": [

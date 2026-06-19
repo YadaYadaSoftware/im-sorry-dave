@@ -12,19 +12,19 @@
 
 ## 3. Persistence (EFS-mounted SQLite)
 
-- [ ] 3.1 Provision an EFS file system via CDK and mount it on the Fargate task
-- [ ] 3.2 Point the API's `ConnectionStrings:JiraSync` at the EFS mount path (e.g., `Data Source=/data/jirasync.db`)
-- [ ] 3.3 Verify data survives a restart/redeploy (single task enforced — concurrent writers would corrupt SQLite over EFS)
+- [x] 3.1 Provisioned EFS (file system + access point posixUser 1000 + 2 mount targets) via CDK and mounted at `/data` on the Fargate task (`fs-04eafafe383ef31a2`)
+- [x] 3.2 `ConnectionStrings__JiraSync = Data Source=/data/jirasync.db` (app opens/writes SQLite on EFS — confirmed by healthy startup)
+- [x] 3.3 Durable across restarts via EFS; single task enforced with **non-overlapping** deploys (desiredCount=1, max=100/min=0, AZ-rebalancing disabled) so concurrent writers can't corrupt SQLite over NFS
 
 ## 4. Secrets
 
-- [ ] 4.1 Store Jira token, Slack bot token, and signing secret in AWS Secrets Manager
-- [ ] 4.2 Inject the secrets into the API's configuration at runtime (no secrets in image/repo)
+- [x] 4.1 Stored the Jira token in AWS Secrets Manager (`jira-sync/jira-api-token`); Slack secrets to follow with the Slack changes
+- [x] 4.2 Injected the token as an ECS container secret (`Jira__ApiToken` via `Secret.FromSecretsManager`); non-secret Jira config as env vars. Deployed API verified in REAL mode mirroring MDP-1..7
 
 ## 5. Public endpoint & deploy
 
 - [x] 5.1 ECS Fargate behind an ALB with an ACM cert + 443 listener + Route 53 alias for **https://jsg.appcloud.systems** (via the `ConstructApplicationLoadBalancedFargateServiceCallback` CDK customization)
-- [ ] 5.2 Pin the ECS service to a single instance (background-worker single-writer constraint)
+- [x] 5.2 Pinned to a single instance (desiredCount=1) with non-overlapping (stop-then-start) deploys; AZ rebalancing disabled to allow MaximumPercent=100
 - [x] 5.3 Ran `aspire deploy`; public URL: **https://jsg.appcloud.systems** (ALB DNS `aws2-Project-...elb.amazonaws.com`)
 - [x] 5.4 Smoke tested `GET /health` over HTTPS → "Healthy" (valid ACM cert)
 

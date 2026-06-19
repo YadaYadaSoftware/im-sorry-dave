@@ -676,12 +676,24 @@
        },
        {
         "Name": "ConnectionStrings__JiraSync",
-        "Value": "Data Source=/tmp/jirasync.db"
+        "Value": "Data Source=/data/jirasync.db"
+       },
+       {
+        "Name": "Jira__BaseUrl",
+        "Value": "https://tim-bassett.atlassian.net/"
+       },
+       {
+        "Name": "Jira__Email",
+        "Value": "hounddog@gmail.com"
+       },
+       {
+        "Name": "Jira__ProjectKeys__0",
+        "Value": "MDP"
        }
       ],
       "Essential": true,
       "Image": {
-       "Fn::Sub": "991795635857.dkr.ecr.us-east-1.${AWS::URLSuffix}/cdk-hnb659fds-container-assets-991795635857-us-east-1:24e140825aefb5547ffbf9d547e8bd2c158edfaaacc6c28fe33af87a41bfc5fd"
+       "Fn::Sub": "991795635857.dkr.ecr.us-east-1.${AWS::URLSuffix}/cdk-hnb659fds-container-assets-991795635857-us-east-1:7be6988bb996fbf840d24599ad9490b7c571cad8a32dade7b30afec8a123571a"
       },
       "LogConfiguration": {
        "LogDriver": "awslogs",
@@ -693,11 +705,35 @@
         "awslogs-region": "us-east-1"
        }
       },
+      "MountPoints": [
+       {
+        "ContainerPath": "/data",
+        "ReadOnly": false,
+        "SourceVolume": "data"
+       }
+      ],
       "Name": "web",
       "PortMappings": [
        {
         "ContainerPort": 8080,
         "Protocol": "tcp"
+       }
+      ],
+      "Secrets": [
+       {
+        "Name": "Jira__ApiToken",
+        "ValueFrom": {
+         "Fn::Join": [
+          "",
+          [
+           "arn:",
+           {
+            "Ref": "AWS::Partition"
+           },
+           ":secretsmanager:us-east-1:991795635857:secret:jira-sync/jira-api-token"
+          ]
+         ]
+        }
        }
       ]
      }
@@ -720,7 +756,24 @@
       "ProjectapiTaskDefTaskRoleCD3FA7A0",
       "Arn"
      ]
-    }
+    },
+    "Volumes": [
+     {
+      "EFSVolumeConfiguration": {
+       "AuthorizationConfig": {
+        "AccessPointId": {
+         "Ref": "DaveEfsDaveApF00FA551"
+        },
+        "IAM": "DISABLED"
+       },
+       "FilesystemId": {
+        "Ref": "DaveEfsE9C21F64"
+       },
+       "TransitEncryption": "ENABLED"
+      },
+      "Name": "data"
+     }
+    ]
    },
    "Metadata": {
     "aws:cdk:path": "aws2/Project-api/TaskDef/Resource"
@@ -796,6 +849,25 @@
          "Arn"
         ]
        }
+      },
+      {
+       "Action": [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret"
+       ],
+       "Effect": "Allow",
+       "Resource": {
+        "Fn::Join": [
+         "",
+         [
+          "arn:",
+          {
+           "Ref": "AWS::Partition"
+          },
+          ":secretsmanager:us-east-1:991795635857:secret:jira-sync/jira-api-token-??????"
+         ]
+        ]
+       }
       }
      ],
      "Version": "2012-10-17"
@@ -814,6 +886,7 @@
   "ProjectapiService025A91D0": {
    "Type": "AWS::ECS::Service",
    "Properties": {
+    "AvailabilityZoneRebalancing": "DISABLED",
     "Cluster": {
      "Ref": "DefaultECSCluster17B1E1C8"
     },
@@ -823,10 +896,10 @@
       "Enable": false,
       "Rollback": false
      },
-     "MaximumPercent": 200,
-     "MinimumHealthyPercent": 100
+     "MaximumPercent": 100,
+     "MinimumHealthyPercent": 0
     },
-    "DesiredCount": 2,
+    "DesiredCount": 1,
     "EnableECSManagedTags": false,
     "HealthCheckGracePeriodSeconds": 60,
     "LaunchType": "FARGATE",
@@ -929,10 +1002,149 @@
     "aws:cdk:path": "aws2/DaveAlias/Resource"
    }
   },
+  "DaveEfsE9C21F64": {
+   "Type": "AWS::EFS::FileSystem",
+   "Properties": {
+    "Encrypted": true,
+    "FileSystemTags": [
+     {
+      "Key": "Name",
+      "Value": "aws2/DaveEfs"
+     }
+    ]
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "aws2/DaveEfs/Resource"
+   }
+  },
+  "DaveEfsEfsSecurityGroup638CB77E": {
+   "Type": "AWS::EC2::SecurityGroup",
+   "Properties": {
+    "GroupDescription": "aws2/DaveEfs/EfsSecurityGroup",
+    "SecurityGroupEgress": [
+     {
+      "CidrIp": "0.0.0.0/0",
+      "Description": "Allow all outbound traffic by default",
+      "IpProtocol": "-1"
+     }
+    ],
+    "Tags": [
+     {
+      "Key": "Name",
+      "Value": "aws2/DaveEfs"
+     }
+    ],
+    "VpcId": {
+     "Ref": "DefaultVPC5503DC78"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "aws2/DaveEfs/EfsSecurityGroup/Resource"
+   }
+  },
+  "DaveEfsEfsSecurityGroupfromaws2DefaultECSClusterSecurityGroup212C401D20492E750810": {
+   "Type": "AWS::EC2::SecurityGroupIngress",
+   "Properties": {
+    "Description": "from aws2DefaultECSClusterSecurityGroup212C401D:2049",
+    "FromPort": 2049,
+    "GroupId": {
+     "Fn::GetAtt": [
+      "DaveEfsEfsSecurityGroup638CB77E",
+      "GroupId"
+     ]
+    },
+    "IpProtocol": "tcp",
+    "SourceSecurityGroupId": {
+     "Fn::GetAtt": [
+      "DefaultECSClusterSecurityGroupF822A7BB",
+      "GroupId"
+     ]
+    },
+    "ToPort": 2049
+   },
+   "Metadata": {
+    "aws:cdk:path": "aws2/DaveEfs/EfsSecurityGroup/from aws2DefaultECSClusterSecurityGroup212C401D:2049"
+   }
+  },
+  "DaveEfsEfsMountTarget17D702C63": {
+   "Type": "AWS::EFS::MountTarget",
+   "Properties": {
+    "FileSystemId": {
+     "Ref": "DaveEfsE9C21F64"
+    },
+    "SecurityGroups": [
+     {
+      "Fn::GetAtt": [
+       "DaveEfsEfsSecurityGroup638CB77E",
+       "GroupId"
+      ]
+     }
+    ],
+    "SubnetId": {
+     "Ref": "DefaultVPCPrivateSubnet1Subnet69F61BC0"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "aws2/DaveEfs/EfsMountTarget1"
+   }
+  },
+  "DaveEfsEfsMountTarget23C4C19A4": {
+   "Type": "AWS::EFS::MountTarget",
+   "Properties": {
+    "FileSystemId": {
+     "Ref": "DaveEfsE9C21F64"
+    },
+    "SecurityGroups": [
+     {
+      "Fn::GetAtt": [
+       "DaveEfsEfsSecurityGroup638CB77E",
+       "GroupId"
+      ]
+     }
+    ],
+    "SubnetId": {
+     "Ref": "DefaultVPCPrivateSubnet2Subnet79FDD6A9"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "aws2/DaveEfs/EfsMountTarget2"
+   }
+  },
+  "DaveEfsDaveApF00FA551": {
+   "Type": "AWS::EFS::AccessPoint",
+   "Properties": {
+    "AccessPointTags": [
+     {
+      "Key": "Name",
+      "Value": "aws2/DaveEfs/DaveAp"
+     }
+    ],
+    "FileSystemId": {
+     "Ref": "DaveEfsE9C21F64"
+    },
+    "PosixUser": {
+     "Gid": "1000",
+     "Uid": "1000"
+    },
+    "RootDirectory": {
+     "CreationInfo": {
+      "OwnerGid": "1000",
+      "OwnerUid": "1000",
+      "Permissions": "0755"
+     },
+     "Path": "/data"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "aws2/DaveEfs/DaveAp/Resource"
+   }
+  },
   "CDKMetadata": {
    "Type": "AWS::CDK::Metadata",
    "Properties": {
-    "Analytics": "v2:deflate64:H4sIAAAAAAAA/31SwW4iMQz9lt5DoFRbaQ97oJRWSBWLZhBX5Alm6iUko9gDQqP591UywLDd1Z78/PKc+NkZ6/HTsx49wIkHZrsfWCp0kwuYvYITbxo0Y92sK6OmO7deTtWyLiyZvC4cSuR6lPlacAWFxZ7vuQmzNwRC3t3EEczmyxgWIO8geIKzWgY6gmB/8dwJBoc3QdfJJZuIgPk8oBOVo6kDyfk9+LpKPfyXmLsyIPNf/CzRrULDupnamgVDFF3hG4QSoivev+KOHF09fWW8EyCH4Y671OYYjmS6OXUwPbepQKJV1pOqsmTStD48bF/AgjO4/VKOFljIWA/bIinIlcexbv5dnUz8kd/riAXdRXPFd+crCCXKbZB3aasIDrrJfLf3FJfekkmL6lB0FzbAjMJ6BaEAa+cHKOOvQImHOsPKM4kP5xdgVNaXrJsPX96evOJWGQxCu9gYHsBBiUE3055Lu+rTVoX417496WaSofFhm9pMKEdpW5Uh+zp06/hZS1WLSn3lAiW5slWvXhYow8eRHunvQ72YraY+4KSqBmsMTN79OD7r0fBRR8Ho4RcTDULthA6osy7+Bp4dfg5nAwAA"
+    "Analytics": "v2:deflate64:H4sIAAAAAAAA/31SwW4aMRD9ltyNIUSN1EMPG0IipJQiFnGNZs2wnWLslWcWhFb775W9wJKk6mnee/Nsz7M91uOHRz26gyMPzGY3sFToJhcwO7VE9nUwqODI7w2asW7WlVGTrVsvJmpRF5ZMXhcOJWo9WvpacAWFxV7vtYzZGwIh767mCKazRSxzkFcQPMJJLQIdQLDfeOYEg8OroZvkzDIRML/36ETlaOpAcnoNvq7SDP8VZq4MyPxFnya5VWhYNxNbs2CIpgt8gVBCTMW7Z9ySo0umz4p3AuQw3GjntTmGA5nunjqYjnuvQGJU1llVWTLptt48bJ7AgjO4+bQcLbCQsR42RXKQKw9j3fx7dQrxgd/6iAXd2XPBN/0VhBLlepE3tFUEe90sfffuqS68JZMeqkMxXXgHZhTWKwgFWDvbQxl/BUps6iVWnkl8OD0Bo7K+ZN28+fJ65AW3ymAQ2sbBcA8OSgy6mfRaequetirEv/btQTfZEo0PmzRmQjlKq3DLunkhi/mJBfex+5H99LWTLrHKjEHmhSeXvuYNbdso/KqlqkWlXLlASa5s1bOXOcrwfqRH+vtQz6eriQ+YVdVgjYHJux+HRz0a3utoGN39YaJBqJ3QHvWyq38Bmmp5O7ADAAA="
    },
    "Metadata": {
     "aws:cdk:path": "aws2/CDKMetadata/Default"
