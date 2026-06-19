@@ -1,13 +1,13 @@
 ## ADDED Requirements
 
-### Requirement: Provision a channel lazily on first need
+### Requirement: Provision a channel lazily on explicit request
 
-The system SHALL create a Slack channel for a work item only when a provisioning trigger occurs — not for every tracked item — and only for configured discussion-worthy issue types. A trigger is an explicit request to discuss the item (e.g., a console/slash command or an @mention of the item) or the item entering an active/in-progress state. The channel name is derived deterministically from the work item key and the channel is seeded with the work item's context.
+The system SHALL create a Slack channel for a work item only on an explicit request to discuss it — not for every tracked item — and only for configured discussion-worthy issue types. An explicit request is a console/slash command, a "Discuss in Slack" action, or a bot @mention of the item. Provisioned channels SHALL be public by default. The channel name is derived deterministically from the work item key and the channel is seeded with the work item's context.
 
-#### Scenario: Channel created on first trigger
+#### Scenario: Channel created on explicit request
 
-- **WHEN** a provisioning trigger fires for an eligible work item that has no linked channel
-- **THEN** the system creates a Slack channel whose name incorporates the work item key (normalized to Slack naming rules)
+- **WHEN** an explicit request fires for an eligible work item that has no linked channel
+- **THEN** the system creates a public Slack channel whose name incorporates the work item key (normalized to Slack naming rules)
 - **AND** posts an initial context message containing the key, summary, type, status, assignee, and a link to the Jira issue
 
 #### Scenario: No channel for untriggered or out-of-scope items

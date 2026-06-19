@@ -67,15 +67,30 @@ Secondary advantages of channels that reinforce the choice:
 scoping + archive-on-close (below). If those prove insufficient at scale, the hybrid model is the
 escape hatch.
 
-### Lazy, scoped provisioning
+### Lazy provisioning via explicit request (first trigger)
 
-**Decision:** Do **not** create a channel for every tracked item. Create one only when a
-provisioning trigger fires (an explicit request to discuss — console/slash command or an @mention
-of the item — or the item entering an active/in-progress state), and only for configured
-discussion-worthy issue types (for `MDP`, the *Idea* type). *Why:* most items never need a
-dedicated discussion space; lazy + scoped provisioning is what makes channel-per-item affordable
-and keeps the sidebar/search usable. *Alternative:* provision for every tracked item — rejected
-(sprawl, mostly-empty channels, channel-create rate limits).
+**Decision:** Do **not** create a channel for every tracked item. Create one only when an
+**explicit request** to discuss the item fires — a console/slash command, a "Discuss in Slack"
+action, or a bot @mention naming the item — and only for configured discussion-worthy issue
+types (for `MDP`, the *Idea* type). *Why:* explicit-request is deterministic and sprawl-free —
+channels exist only where someone actually intends to discuss, which also means the summarization
+capability only ever captures meaningful conversations. *Alternatives:* provision for every
+tracked item — rejected (sprawl, mostly-empty channels, rate limits). **Auto-provision on
+active-status transition** (e.g., idea → "Under consideration") — *deferred*, a natural opt-in
+second trigger once usage patterns are known. **Mention/keyword scanning across the workspace** —
+rejected for now (broad message-read scopes + privacy/dedupe cost).
+
+### Public channels by default
+
+**Decision:** Provisioned channels are **public** by default. *Why:* discoverability and
+workspace-wide search are the point of product-discovery ideas — broad input and durable org
+memory — and public channels keep the bot's scopes simple and avoid invite-management becoming
+load-bearing (our Jira→Slack identity mapping is only best-effort). *Alternative:* private by
+default — rejected for the idea use case (kills discoverability, makes invites a hard dependency).
+A **per-item override to private** (driven by a label such as `confidential` or a project/issue-
+type rule) is *deferred* as a follow-on for sensitive ideas. Note: Slack does not allow freely
+flipping a channel's visibility later, so the default is sticky — an at-creation override is the
+intended mechanism rather than post-hoc conversion.
 
 ### Supporting decisions
 
@@ -104,6 +119,7 @@ and keeps the sidebar/search usable. *Alternative:* provision for every tracked 
 
 ## Open Questions
 
-- Should channels be public or private by default?
-- Exact provisioning trigger(s) to enable first — explicit request only, or also auto on active-status transition?
 - Naming convention details (prefix, slug length) and whether to include the summary slug.
+
+**Resolved:** channels are **public** by default (private per-item override deferred); the first
+provisioning trigger is **explicit request** (auto-on-active-status deferred).
