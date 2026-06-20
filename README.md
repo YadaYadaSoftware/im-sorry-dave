@@ -171,12 +171,17 @@ DB path are set as env vars in the AppHost's publish branch.
 
 ### Deploy / update
 ```bash
+# The webhook shared secret is passed at deploy time as a plain env var (see "secure the webhook").
+$env:WebhookSecret = (aws secretsmanager get-secret-value --secret-id jira-sync/webhook-secret --query SecretString --output text)
 aspire deploy --project src/SorryDave.JiraSync.AppHost --non-interactive
 ```
 `aspire publish` (no deploy) synthesizes the CDK to `aws-publish/cdk.out/` if you want to inspect
 the CloudFormation first. Re-running `aspire deploy` updates the stack in place. Because the
 service is single-writer (EFS+SQLite), deploys are **stop-then-start** (brief downtime; AZ
 rebalancing is disabled so `MaximumPercent=100` is allowed).
+
+> **Important:** every `aspire deploy` must set `$env:WebhookSecret`, or the API redeploys with an
+> empty secret and the webhook endpoint goes back to accepting unsigned requests.
 
 ### Verify
 ```bash
@@ -193,9 +198,11 @@ POST https://<site>/rest/webhooks/1.0/webhook
   "events": ["jira:issue_created","jira:issue_updated","jira:issue_deleted","comment_created"],
   "filters": { "issue-related-events-section": "project = MDP" } }
 ```
-**Hardening (recommended):** set a `Webhook__Secret` env var on the API and append
-`?secret=<value>` to the webhook URL so the endpoint rejects unsigned requests (it currently
-accepts them when no secret is configured).
+**The webhook is secured.** A shared secret lives in Secrets Manager (`jira-sync/webhook-secret`)
+and is supplied at deploy time as `$env:WebhookSecret` → injected as the API's `Webhook__Secret`
+env var; the registered webhook URL carries `?secret=<value>`. Requests without the secret get
+**401**. (It's passed as a plain env var rather than an ECS-injected Secrets Manager secret — see
+the learnings below for why.)
 
 ### Teardown (stops all cost)
 ```bash
@@ -208,4 +215,5 @@ The EFS file system has `RemovalPolicy.DESTROY`, so its data is deleted with the
 - The container runs non-root with a read-only working dir → **SQLite must live on a writable path** (the EFS `/data` mount).
 - The ALB health check hits `/` expecting **200** → the API root returns 200 (Swagger is at `/swagger`).
 - ECS **Availability Zone Rebalancing** forbids `MaximumPercent <= 100`; it's disabled so the single-instance, non-overlapping deploy config is valid.
+- **Adding a *new* ECS-injected Secrets Manager secret in a stop-then-start deploy can outage the service:** the new task launches before the IAM `GetSecretValue` grant has propagated, and with `MinHealthyPercent=0` there's no old task to fall back on, so the rollout spins on `AccessDeniedException`. The Jira token (already-propagated grant) is injected this way fine, but the webhook secret is passed as a **plain env var** to sidestep this.
 - **Eventual Azure:** EFS+SQLite is AWS-locked; the move to Azure Container Apps + Azure Database for PostgreSQL would switch persistence then.

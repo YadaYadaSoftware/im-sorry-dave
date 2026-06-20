@@ -37,6 +37,10 @@ else
        .WithEnvironment("Jira__BaseUrl", "https://tim-bassett.atlassian.net/")
        .WithEnvironment("Jira__Email", "hounddog@gmail.com")
        .WithEnvironment("Jira__ProjectKeys__0", "MDP")
+       // Webhook shared secret (anti-spoofing) as a plain env var supplied at deploy time via the
+       // WebhookSecret config key (e.g. $env:WebhookSecret) — not stored in the repo. Empty = the
+       // endpoint accepts unsigned requests.
+       .WithEnvironment("Webhook__Secret", builder.Configuration["WebhookSecret"] ?? "")
        .PublishAsECSFargateServiceWithALB(new PublishECSFargateServiceWithALBConfig
        {
            // Inject the Jira API token from AWS Secrets Manager as a container secret (never in the

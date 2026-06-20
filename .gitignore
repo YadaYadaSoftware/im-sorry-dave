@@ -430,3 +430,8 @@ FodyWeavers.xsd
 
 # Aspire/CDK deploy output
 aws-publish/
+
+# Local dev SQLite runtime files
+*.db-shm
+*.db-wal
+src/SorryDave.JiraSync.Api/jirasync.db

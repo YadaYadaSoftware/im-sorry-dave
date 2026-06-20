@@ -13,11 +13,15 @@
       "Bash",
       "PowerShell"
     ],
-    "deny": [
+    "ask": [
       "PowerShell(git push*)",
-      "Bash(git push*)",
+      "Bash(git push*)"
+    ],
+    "deny": [
       "PowerShell(git push --force*)",
       "Bash(git push --force*)",
+      "PowerShell(git push -f*)",
+      "Bash(git push -f*)",
       "PowerShell(git reset --hard*)",
       "Bash(git reset --hard*)",
       "PowerShell(git clean -*)",
