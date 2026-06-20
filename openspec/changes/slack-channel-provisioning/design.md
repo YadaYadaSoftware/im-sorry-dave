@@ -100,6 +100,7 @@ intended mechanism rather than post-hoc conversion.
 - **Identity resolution is best-effort.** Map Jira users to Slack users by email where available; if unresolved, continue without failing and record the skip. *Alternative:* hard-require mapping — rejected (would block provisioning).
 - **Context reflected via topic/purpose + pinned message.** Status/assignee in the topic; Jira link pinned. Low-noise; avoids spamming on every minor change.
 - **Build against the real Slack Web API — no seeded fake.** Unlike the Jira client's in-memory fallback, the Slack client targets a real workspace; provisioning requires a configured bot token. Unit tests use an `ISlackClient` test double, and a credential-gated integration test covers the real create → seed → archive round-trip. *Why:* validate directly against Slack rather than a simulated workspace. *Trade-off:* the service can't be exercised end-to-end without Slack credentials (accepted).
+- **Secrets follow the platform convention** (`secrets-configuration-convention`). The Slack bot token and signing secret are SSM parameters under the `/jira-sync/` prefix (`/jira-sync/Slack/BotToken`, `/jira-sync/Slack/SigningSecret`), resolved as config keys (`Slack:BotToken`, `Slack:SigningSecret`); locally they come from user-secrets. No bespoke secret delivery.
 
 ## Risks / Trade-offs
 

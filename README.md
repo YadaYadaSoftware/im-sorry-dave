@@ -160,28 +160,40 @@ HTTP:80 + HTTPS:443 · ACM cert for `jsg.appcloud.systems` (DNS-validated) · Ro
 - A **Route 53 public hosted zone** for the domain (here `appcloud.systems`).
 - One-time per account/region: `cdk bootstrap aws://<account>/us-east-1`.
 
-### Secrets (one-time)
-The Jira API token is read from **AWS Secrets Manager** at runtime (never in the image/repo):
+### Secrets (convention)
+**All secrets are configuration keys** the API reads source-agnostically. In AWS they come from
+**SSM Parameter Store** (SecureString) under the `/jira-sync/` prefix — parameter paths map to config
+keys (`/jira-sync/Jira/ApiToken` → `Jira:ApiToken`). The API loads them at startup via an app-side
+provider (enabled by `Aws__ParameterStorePath=/jira-sync`, set in the AppHost), and the **task role**
+has one grant on the prefix, so adding a secret is just another parameter — no new IAM grant, no
+task-def change, no redeploy.
+
 ```bash
-aws secretsmanager create-secret --name "jira-sync/jira-api-token" \
-  --secret-string "<jira-api-token>" --region us-east-1
+# one-time per secret (SecureString, KMS-encrypted)
+aws ssm put-parameter --name "/jira-sync/Jira/ApiToken"  --type SecureString --value "<token>"
+aws ssm put-parameter --name "/jira-sync/Webhook/Secret" --type SecureString --value "<secret>"
+# Slack/Claude land the same way: /jira-sync/Slack/BotToken, /jira-sync/Slack/SigningSecret,
+#                                 /jira-sync/Anthropic/ApiKey
 ```
-Non-secret Jira config (`Jira__BaseUrl`, `Jira__Email`, `Jira__ProjectKeys__0=MDP`) and the EFS
-DB path are set as env vars in the AppHost's publish branch.
+
+Precedence is layered: `appsettings.json` (non-secret defaults, **no secrets committed**) → SSM
+(prod) → environment variables → user-secrets (local dev). Non-secret Jira config (`Jira__BaseUrl`,
+`Jira__Email`, `Jira__ProjectKeys__0=MDP`) and the EFS DB path are plain env vars in the AppHost.
+On the eventual **Azure** move, swap the SSM provider for the Azure Key Vault provider — the config
+keys and app code don't change.
 
 ### Deploy / update
 ```bash
-# The webhook shared secret is passed at deploy time as a plain env var (see "secure the webhook").
-$env:WebhookSecret = (aws secretsmanager get-secret-value --secret-id jira-sync/webhook-secret --query SecretString --output text)
 aspire deploy --project src/SorryDave.JiraSync.AppHost --non-interactive
 ```
-`aspire publish` (no deploy) synthesizes the CDK to `aws-publish/cdk.out/` if you want to inspect
-the CloudFormation first. Re-running `aspire deploy` updates the stack in place. Because the
-service is single-writer (EFS+SQLite), deploys are **stop-then-start** (brief downtime; AZ
-rebalancing is disabled so `MaximumPercent=100` is allowed).
+Secrets come from SSM at runtime, so no secret env vars are needed at deploy time. `aspire publish`
+(no deploy) synthesizes the CDK to `aws-publish/cdk.out/` if you want to inspect the CloudFormation
+first. Re-running `aspire deploy` updates the stack in place. Because the service is single-writer
+(EFS+SQLite), deploys are **stop-then-start** (brief downtime; AZ rebalancing is disabled so
+`MaximumPercent=100` is allowed).
 
-> **Important:** every `aspire deploy` must set `$env:WebhookSecret`, or the API redeploys with an
-> empty secret and the webhook endpoint goes back to accepting unsigned requests.
+> **Note:** the `aspire deploy` CLI may exit with an error/timeout while CloudFormation keeps going —
+> check the stack status (`UPDATE_COMPLETE`) and `/health` before assuming a deploy failed.
 
 ### Verify
 ```bash
@@ -198,11 +210,9 @@ POST https://<site>/rest/webhooks/1.0/webhook
   "events": ["jira:issue_created","jira:issue_updated","jira:issue_deleted","comment_created"],
   "filters": { "issue-related-events-section": "project = MDP" } }
 ```
-**The webhook is secured.** A shared secret lives in Secrets Manager (`jira-sync/webhook-secret`)
-and is supplied at deploy time as `$env:WebhookSecret` → injected as the API's `Webhook__Secret`
-env var; the registered webhook URL carries `?secret=<value>`. Requests without the secret get
-**401**. (It's passed as a plain env var rather than an ECS-injected Secrets Manager secret — see
-the learnings below for why.)
+**The webhook is secured.** The shared secret lives in SSM (`/jira-sync/Webhook/Secret`) and the API
+loads it as `Webhook:Secret`; the registered webhook URL carries `?secret=<value>`. Requests without
+the secret get **401**.
 
 ### Teardown (stops all cost)
 ```bash
@@ -215,5 +225,7 @@ The EFS file system has `RemovalPolicy.DESTROY`, so its data is deleted with the
 - The container runs non-root with a read-only working dir → **SQLite must live on a writable path** (the EFS `/data` mount).
 - The ALB health check hits `/` expecting **200** → the API root returns 200 (Swagger is at `/swagger`).
 - ECS **Availability Zone Rebalancing** forbids `MaximumPercent <= 100`; it's disabled so the single-instance, non-overlapping deploy config is valid.
-- **Adding a *new* ECS-injected Secrets Manager secret in a stop-then-start deploy can outage the service:** the new task launches before the IAM `GetSecretValue` grant has propagated, and with `MinHealthyPercent=0` there's no old task to fall back on, so the rollout spins on `AccessDeniedException`. The Jira token (already-propagated grant) is injected this way fine, but the webhook secret is passed as a **plain env var** to sidestep this.
-- **Eventual Azure:** EFS+SQLite is AWS-locked; the move to Azure Container Apps + Azure Database for PostgreSQL would switch persistence then.
+- **Secrets come from SSM Parameter Store via an app-side provider, not ECS secret injection.** ECS injection needs a *new* IAM grant per secret, and adding one during a `MinHealthyPercent=0` stop-then-start deploy outages the service (the new task launches before the grant propagates, with no old task to fall back on). The SSM provider needs one task-role grant on the prefix, so new secrets are additive — see the secrets section above.
+- **`ssm:GetParametersByPath` authorizes against the path NODE, not the child wildcard.** Grant **both** `parameter/jira-sync` *and* `parameter/jira-sync/*` — a `/*`-only grant fails the by-path call with `AccessDenied` even though the CLI by-name calls work.
+- **The SSM provider must be added directly to the builder** (`builder.Configuration.AddSystemsManager(...)`). Building the source on a throwaway `ConfigurationBuilder` and re-homing it loads nothing (no error, just empty config). Also: Git Bash mangles a `/jira-sync`-style env-var value (MSYS path conversion) — test the provider from PowerShell, or prefix `MSYS_NO_PATHCONV=1`.
+- **Eventual Azure:** EFS+SQLite is AWS-locked, and the SSM provider is AWS-specific (swap it for the Key Vault provider — config keys unchanged). The move to Azure Container Apps + Azure Database for PostgreSQL would switch persistence then.

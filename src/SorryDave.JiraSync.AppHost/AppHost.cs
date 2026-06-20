@@ -32,29 +32,17 @@ else
     // SQLite lives on an EFS-mounted /data (durable across task restarts/redeploys). The EFS file
     // system, access point, volume, and mount are wired in the construct callback below.
     api.WithEnvironment("ConnectionStrings__JiraSync", "Data Source=/data/jirasync.db")
-       // Non-secret Jira config (the API token comes from Secrets Manager below). With these set,
-       // the deployed API runs in REAL mode and mirrors the MDP project.
+       // Non-secret Jira config; secrets (Jira token, webhook secret, future Slack/Anthropic keys)
+       // are resolved at runtime from SSM Parameter Store — see Aws__ParameterStorePath below.
        .WithEnvironment("Jira__BaseUrl", "https://tim-bassett.atlassian.net/")
        .WithEnvironment("Jira__Email", "hounddog@gmail.com")
        .WithEnvironment("Jira__ProjectKeys__0", "MDP")
-       // Webhook shared secret (anti-spoofing) as a plain env var supplied at deploy time via the
-       // WebhookSecret config key (e.g. $env:WebhookSecret) — not stored in the repo. Empty = the
-       // endpoint accepts unsigned requests.
-       .WithEnvironment("Webhook__Secret", builder.Configuration["WebhookSecret"] ?? "")
+       // Enable the API's SSM Parameter Store provider over the /jira-sync prefix
+       // (/jira-sync/Jira/ApiToken -> Jira:ApiToken, /jira-sync/Webhook/Secret -> Webhook:Secret).
+       // The task role is granted read on this prefix in the construct callback below.
+       .WithEnvironment("Aws__ParameterStorePath", "/jira-sync")
        .PublishAsECSFargateServiceWithALB(new PublishECSFargateServiceWithALBConfig
        {
-           // Inject the Jira API token from AWS Secrets Manager as a container secret (never in the
-           // image or repo). ECS auto-grants the task execution role read access to referenced secrets.
-           PropsApplicationLoadBalancedTaskImageOptionsCallback = (ctx, props) =>
-           {
-               var stack = (Amazon.CDK.Stack)ctx.GetType()
-                   .GetField("_stack", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-                   .GetValue(ctx)!;
-               var jiraToken = Amazon.CDK.AWS.SecretsManager.Secret.FromSecretNameV2(stack, "JiraApiToken", "jira-sync/jira-api-token");
-               props.Secrets ??= new Dictionary<string, Amazon.CDK.AWS.ECS.Secret>();
-               props.Secrets["Jira__ApiToken"] = Amazon.CDK.AWS.ECS.Secret.FromSecretsManager(jiraToken);
-           },
-
            // Single instance with non-overlapping deploys: EFS-mounted SQLite is single-writer, so a
            // rolling deploy must stop the old task before starting the new one (two concurrent
            // writers would corrupt the DB over NFS). Brief downtime on deploy is acceptable here.
@@ -75,6 +63,35 @@ else
                // <= 100. Disable it so the single-instance stop-then-start deployment is permitted.
                ((Amazon.CDK.CfnResource)svc.Service.Node.DefaultChild!)
                    .AddPropertyOverride("AvailabilityZoneRebalancing", "DISABLED");
+
+               // The task role reads secrets from SSM Parameter Store under /jira-sync/* at startup.
+               // ONE grant covers all current and future parameters under the prefix, so adding a
+               // secret never needs a new grant or redeploy (plus kms:Decrypt for SecureString).
+               svc.TaskDefinition.TaskRole.AddToPrincipalPolicy(new Amazon.CDK.AWS.IAM.PolicyStatement(
+                   new Amazon.CDK.AWS.IAM.PolicyStatementProps
+                   {
+                       // GetParametersByPath authorizes against the path NODE (parameter/jira-sync),
+                       // GetParameter(s) against the child parameters — grant both.
+                       Actions = new[] { "ssm:GetParametersByPath", "ssm:GetParameters", "ssm:GetParameter" },
+                       Resources = new[]
+                       {
+                           $"arn:aws:ssm:{stack.Region}:{stack.Account}:parameter/jira-sync",
+                           $"arn:aws:ssm:{stack.Region}:{stack.Account}:parameter/jira-sync/*"
+                       }
+                   }));
+               svc.TaskDefinition.TaskRole.AddToPrincipalPolicy(new Amazon.CDK.AWS.IAM.PolicyStatement(
+                   new Amazon.CDK.AWS.IAM.PolicyStatementProps
+                   {
+                       Actions = new[] { "kms:Decrypt" },
+                       Resources = new[] { "*" },
+                       Conditions = new Dictionary<string, object>
+                       {
+                           ["StringEquals"] = new Dictionary<string, object>
+                           {
+                               ["kms:ViaService"] = $"ssm.{stack.Region}.amazonaws.com"
+                           }
+                       }
+                   }));
 
                var zone = Amazon.CDK.AWS.Route53.HostedZone.FromHostedZoneAttributes(stack, "DaveZone",
                    new Amazon.CDK.AWS.Route53.HostedZoneAttributes

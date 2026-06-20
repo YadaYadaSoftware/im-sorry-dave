@@ -1,11 +1,36 @@
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using SorryDave.JiraSync.Api.Endpoints;
 using SorryDave.JiraSync.Core.DependencyInjection;
 using SorryDave.JiraSync.Core.Persistence;
 using SorryDave.JiraSync.ServiceDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// In a deployed environment, load secrets from AWS SSM Parameter Store under a path prefix
+// (e.g. /jira-sync). Parameter paths map to config keys: /jira-sync/Jira/ApiToken -> Jira:ApiToken.
+// Enabled only when Aws:ParameterStorePath is set (the AppHost sets it for AWS). Required (optional:
+// false) so an unreachable store fails startup rather than running uncredentialed. Added last, so
+// the store is authoritative for the keys it supplies.
+var ssmPath = builder.Configuration["Aws:ParameterStorePath"];
+if (!string.IsNullOrWhiteSpace(ssmPath))
+{
+    builder.Configuration.AddSystemsManager(ssmPath, optional: false);
+
+    // Fail fast: in a deployed environment we expect real Jira. Never silently fall back to the
+    // fake backend because a required secret didn't resolve. (Names the missing keys, not values.)
+    if (builder.Configuration.GetValue<bool?>("Jira:UseFake") != true)
+    {
+        var missing = new[] { "Jira:BaseUrl", "Jira:Email", "Jira:ApiToken" }
+            .Where(k => string.IsNullOrWhiteSpace(builder.Configuration[k]))
+            .ToArray();
+        if (missing.Length > 0)
+            throw new InvalidOperationException(
+                $"Required secrets not resolved at startup: {string.Join(", ", missing)} " +
+                $"(expected from SSM Parameter Store under '{ssmPath}'). Refusing to start.");
+    }
+}
 
 builder.AddServiceDefaults();
 builder.Services.AddJiraSyncCore(builder.Configuration);
