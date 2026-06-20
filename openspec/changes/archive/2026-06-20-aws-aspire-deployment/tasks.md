@@ -35,6 +35,8 @@
 
 ## 6. Wire up & docs
 
-- [ ] 6.1 Register the Jira webhook against the public URL and verify a live event round-trips
-- [ ] 6.2 Document the deploy runbook (prereqs, `aspire deploy`, secrets, webhook registration) in the README
-- [ ] 6.3 Note the Slack app Event Subscriptions + slash command will target this URL (handled in the Slack changes)
+- [x] 6.1 Registered the Jira webhook (`webhook/1`, enabled, scoped to `project = MDP`, events issue created/updated/deleted + comment created) → `https://jsg.appcloud.systems/webhooks/jira`. Endpoint is publicly reachable over HTTPS; a live edit-round-trip check is available on request.
+- [x] 6.2 Documented the deploy runbook (prereqs, secrets, `aspire deploy`, verify, webhook, teardown, cost, learnings) in the README
+- [x] 6.3 Noted the Slack app Event Subscriptions + slash command will target `https://jsg.appcloud.systems` (handled in the Slack changes)
+
+> **Optional follow-ups (not blocking):** set a `Webhook__Secret` on the API + append `?secret=` to the webhook URL (the endpoint currently accepts unsigned requests); switch EFS `RemovalPolicy` to `RETAIN` before relying on the data; consider a no-NAT topology to cut cost.

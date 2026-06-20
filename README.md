@@ -140,3 +140,72 @@ What you can do (all via the API):
 
 Keys: `F5` refresh · `Ctrl-R` smoke run · `Ctrl-Q` quit. The guided-run logic is covered
 headlessly by `JiraSyncSmokeRunnerTests` (using an in-memory fake API client).
+
+## Deploying to AWS (`aws-aspire-deployment`)
+
+The Aspire AppHost deploys the **API** (only) to AWS ECS Fargate via `aspire deploy`. Live at
+**https://jsg.appcloud.systems**. The interactive console is never deployed (it's added only in
+`builder.ExecutionContext.IsRunMode`).
+
+### What gets created (stack `aws2`, region `us-east-1`)
+ECR image · VPC (2 AZ, 2 NAT gateways) · ECS Fargate cluster + service (**1 task**) · ALB with
+HTTP:80 + HTTPS:443 · ACM cert for `jsg.appcloud.systems` (DNS-validated) · Route 53 alias ·
+**EFS** file system mounted at `/data` for the SQLite DB · CloudWatch logs.
+
+> **Cost:** ~**$85/month** while running (NAT gateways dominate) + negligible EFS.
+
+### Prerequisites
+- AWS account + credentials: `aws configure` (an admin-ish user for the first deploy).
+- Tools: **Docker**, **Node + AWS CDK CLI** (`npm i -g aws-cdk`), the **Aspire CLI**, .NET 10 SDK.
+- A **Route 53 public hosted zone** for the domain (here `appcloud.systems`).
+- One-time per account/region: `cdk bootstrap aws://<account>/us-east-1`.
+
+### Secrets (one-time)
+The Jira API token is read from **AWS Secrets Manager** at runtime (never in the image/repo):
+```bash
+aws secretsmanager create-secret --name "jira-sync/jira-api-token" \
+  --secret-string "<jira-api-token>" --region us-east-1
+```
+Non-secret Jira config (`Jira__BaseUrl`, `Jira__Email`, `Jira__ProjectKeys__0=MDP`) and the EFS
+DB path are set as env vars in the AppHost's publish branch.
+
+### Deploy / update
+```bash
+aspire deploy --project src/SorryDave.JiraSync.AppHost --non-interactive
+```
+`aspire publish` (no deploy) synthesizes the CDK to `aws-publish/cdk.out/` if you want to inspect
+the CloudFormation first. Re-running `aspire deploy` updates the stack in place. Because the
+service is single-writer (EFS+SQLite), deploys are **stop-then-start** (brief downtime; AZ
+rebalancing is disabled so `MaximumPercent=100` is allowed).
+
+### Verify
+```bash
+curl https://jsg.appcloud.systems/health      # -> Healthy
+curl https://jsg.appcloud.systems/workitems   # -> MDP-1 .. MDP-7 (real Jira)
+```
+
+### Register the Jira webhook
+Point Jira at the deployed endpoint (Jira **Settings → System → WebHooks**, or the REST API):
+```bash
+POST https://<site>/rest/webhooks/1.0/webhook
+{ "name": "im-sorry-dave jira-sync (MDP)",
+  "url": "https://jsg.appcloud.systems/webhooks/jira",
+  "events": ["jira:issue_created","jira:issue_updated","jira:issue_deleted","comment_created"],
+  "filters": { "issue-related-events-section": "project = MDP" } }
+```
+**Hardening (recommended):** set a `Webhook__Secret` env var on the API and append
+`?secret=<value>` to the webhook URL so the endpoint rejects unsigned requests (it currently
+accepts them when no secret is configured).
+
+### Teardown (stops all cost)
+```bash
+aws cloudformation delete-stack --stack-name aws2 --region us-east-1
+```
+The EFS file system has `RemovalPolicy.DESTROY`, so its data is deleted with the stack — switch to
+`RETAIN` before relying on it for anything you can't re-backfill from Jira.
+
+### Gotchas baked into the AppHost (learnings)
+- The container runs non-root with a read-only working dir → **SQLite must live on a writable path** (the EFS `/data` mount).
+- The ALB health check hits `/` expecting **200** → the API root returns 200 (Swagger is at `/swagger`).
+- ECS **Availability Zone Rebalancing** forbids `MaximumPercent <= 100`; it's disabled so the single-instance, non-overlapping deploy config is valid.
+- **Eventual Azure:** EFS+SQLite is AWS-locked; the move to Azure Container Apps + Azure Database for PostgreSQL would switch persistence then.
