@@ -1,7 +1,12 @@
 #pragma warning disable ASPIREAWSPUBLISHERS001 // experimental AWS publish/deploy APIs
 using Aspire.Hosting.AWS.Deployment;
+using Microsoft.Extensions.Configuration;
 
 var builder = DistributedApplication.CreateBuilder(args);
+
+// Load the AppHost's own user-secrets so secrets set locally (e.g. Slack:BotToken / Slack:SigningSecret)
+// can be transported into AWS SSM at deploy time, regardless of host environment.
+builder.Configuration.AddUserSecrets(System.Reflection.Assembly.GetExecutingAssembly(), optional: true);
 
 // The API is the primary service; its /health endpoint gates dependents.
 var api = builder.AddProject<Projects.SorryDave_JiraSync_Api>("api")
@@ -24,6 +29,32 @@ if (builder.ExecutionContext.IsRunMode)
 }
 else
 {
+    // Transport secrets from local config (the AppHost's user-secrets) into SSM Parameter Store, so
+    // a single `aspire deploy` provisions them as SecureString. Written via the SSM API — NOT
+    // CloudFormation, which can't create SecureString — so the values never land in a template.
+    // Idempotent upsert; only keys present locally are written (so a missing bot token is skipped).
+    var transportable = new (string Key, string Param)[]
+    {
+        ("Slack:BotToken", "/jira-sync/Slack/BotToken"),
+        ("Slack:SigningSecret", "/jira-sync/Slack/SigningSecret"),
+    };
+    var toTransport = transportable.Where(p => !string.IsNullOrWhiteSpace(builder.Configuration[p.Key])).ToArray();
+    if (toTransport.Length > 0)
+    {
+        using var ssm = new Amazon.SimpleSystemsManagement.AmazonSimpleSystemsManagementClient(Amazon.RegionEndpoint.USEast1);
+        foreach (var (key, param) in toTransport)
+        {
+            await ssm.PutParameterAsync(new Amazon.SimpleSystemsManagement.Model.PutParameterRequest
+            {
+                Name = param,
+                Value = builder.Configuration[key],
+                Type = Amazon.SimpleSystemsManagement.ParameterType.SecureString,
+                Overwrite = true,
+            });
+        }
+        Console.WriteLine($"Transported {toTransport.Length} secret(s) to SSM /jira-sync/Slack/*.");
+    }
+
     // Publish/deploy (e.g. `aspire deploy`): a CDK compute environment (VPC + ECS cluster) plus
     // the API → AWS ECS Fargate behind an Application Load Balancer. EFS-mounted SQLite, the ACM
     // cert for jsg.appcloud.systems, and single-instance are layered on next once the minimal

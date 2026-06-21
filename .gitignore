@@ -435,3 +435,7 @@ aws-publish/
 *.db-shm
 *.db-wal
 src/SorryDave.JiraSync.Api/jirasync.db
+/docs/slackcredentials.md
+
+# Local Slack credentials (move to user-secrets; never commit)
+docs/slackcredentials.md

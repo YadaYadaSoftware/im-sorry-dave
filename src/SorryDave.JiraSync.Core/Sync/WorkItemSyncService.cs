@@ -16,12 +16,18 @@ public class WorkItemSyncService : IWorkItemSyncService
     private readonly JiraSyncDbContext _db;
     private readonly TimeProvider _clock;
     private readonly ILogger<WorkItemSyncService> _logger;
+    private readonly IReadOnlyList<IWorkItemChangeListener> _listeners;
 
-    public WorkItemSyncService(JiraSyncDbContext db, TimeProvider clock, ILogger<WorkItemSyncService> logger)
+    public WorkItemSyncService(
+        JiraSyncDbContext db,
+        TimeProvider clock,
+        ILogger<WorkItemSyncService> logger,
+        IEnumerable<IWorkItemChangeListener>? listeners = null)
     {
         _db = db;
         _clock = clock;
         _logger = logger;
+        _listeners = listeners?.ToList() ?? (IReadOnlyList<IWorkItemChangeListener>)Array.Empty<IWorkItemChangeListener>();
     }
 
     public async Task<SyncOutcome> ApplyIssueAsync(JiraIssueData issue, CancellationToken ct = default)
@@ -61,6 +67,9 @@ public class WorkItemSyncService : IWorkItemSyncService
             return SyncOutcome.SkippedStale;
         }
 
+        var previousStatus = existing.Status;
+        var previousAssignee = existing.AssigneeAccountId;
+
         existing.ProjectKey = issue.ProjectKey;
         existing.IssueType = issue.IssueType;
         existing.Status = issue.Status;
@@ -75,7 +84,38 @@ public class WorkItemSyncService : IWorkItemSyncService
         existing.IsDeleted = false; // a fresh update means it exists again
 
         await _db.SaveChangesAsync(ct);
+
+        var change = new WorkItemChange
+        {
+            Key = issue.Key,
+            Status = issue.Status,
+            PreviousStatus = previousStatus,
+            AssigneeAccountId = issue.AssigneeAccountId,
+            AssigneeDisplayName = issue.AssigneeDisplayName,
+            PreviousAssigneeAccountId = previousAssignee,
+        };
+        if (change.StatusChanged || change.AssigneeChanged)
+            await NotifyAsync(change, ct);
+
         return SyncOutcome.Updated;
+    }
+
+    /// <summary>Best-effort fan-out to change listeners — failures are logged, never rethrown, so a
+    /// downstream (e.g. Slack) outage cannot block Jira mirroring.</summary>
+    private async Task NotifyAsync(WorkItemChange change, CancellationToken ct)
+    {
+        foreach (var listener in _listeners)
+        {
+            try
+            {
+                await listener.OnWorkItemChangedAsync(change, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Work-item change listener {Listener} failed for {Key}.",
+                    listener.GetType().Name, change.Key);
+            }
+        }
     }
 
     public async Task<SyncOutcome> ApplyDeletionAsync(string key, CancellationToken ct = default)

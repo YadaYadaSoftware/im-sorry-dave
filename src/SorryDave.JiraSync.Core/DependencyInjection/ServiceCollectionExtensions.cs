@@ -9,6 +9,7 @@ using SorryDave.JiraSync.Core.Configuration;
 using SorryDave.JiraSync.Core.Jira;
 using SorryDave.JiraSync.Core.Mapping;
 using SorryDave.JiraSync.Core.Persistence;
+using SorryDave.JiraSync.Core.Slack;
 using SorryDave.JiraSync.Core.Sync;
 using SorryDave.JiraSync.Core.WriteBack;
 
@@ -26,6 +27,7 @@ public static class ServiceCollectionExtensions
         services.Configure<JiraOptions>(configuration.GetSection(JiraOptions.SectionName));
         services.Configure<WebhookOptions>(configuration.GetSection(WebhookOptions.SectionName));
         services.Configure<SyncOptions>(configuration.GetSection(SyncOptions.SectionName));
+        services.Configure<SlackOptions>(configuration.GetSection(SlackOptions.SectionName));
 
         services.TryAddSingletonTimeProvider();
 
@@ -38,6 +40,21 @@ public static class ServiceCollectionExtensions
             services.AddSingletonFakeJira();
         else
             services.AddRealJira(jira);
+
+        // Slack channel provisioning — registered only when a bot token is configured. The same
+        // instance serves as the explicit-command service and the Jira-event change listener.
+        var slack = configuration.GetSection(SlackOptions.SectionName).Get<SlackOptions>() ?? new SlackOptions();
+        if (slack.IsConfigured)
+        {
+            services.AddHttpClient<ISlackClient, SlackWebApiClient>(client =>
+            {
+                client.BaseAddress = new Uri("https://slack.com/api/");
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", slack.BotToken);
+            });
+            services.AddScoped<SlackChannelService>();
+            services.AddScoped<ISlackChannelService>(sp => sp.GetRequiredService<SlackChannelService>());
+            services.AddScoped<IWorkItemChangeListener>(sp => sp.GetRequiredService<SlackChannelService>());
+        }
 
         services.AddScoped<IWorkItemSyncService, WorkItemSyncService>();
         services.AddScoped<IMappingStore, MappingStore>();

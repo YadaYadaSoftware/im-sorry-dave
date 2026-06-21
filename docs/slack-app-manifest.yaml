@@ -1,0 +1,41 @@
+# im-sorry-dave — Slack app manifest
+#
+# Create the app from this manifest:
+#   https://api.slack.com/apps  ->  Create New App  ->  From an app manifest
+#   pick your (test) workspace, paste this YAML, Create.
+#
+# Then collect the two secrets:
+#   - Bot token:      Install to Workspace  ->  OAuth & Permissions  ->  "Bot User OAuth Token"
+#                     (starts xoxb-)  ->  config key  Slack:BotToken
+#   - Signing secret: Basic Information  ->  App Credentials  ->  "Signing Secret"
+#                     ->  config key  Slack:SigningSecret
+#
+# These bot scopes cover channel provisioning + lifecycle + context reflection. The slash command
+# and Events API request URLs are added LATER (Slack validates those URLs live, so they go in once
+# the /slack/commands and /slack/events endpoints are deployed). The first trigger is the console
+# command, which needs only the bot token.
+
+display_information:
+  name: im-sorry-dave
+  description: Provisions a Slack channel per Jira work item and reflects its status back.
+  background_color: "#1a1a2e"
+
+features:
+  bot_user:
+    display_name: im-sorry-dave
+    always_online: true
+
+oauth_config:
+  scopes:
+    bot:
+      - channels:manage      # create / archive / unarchive public channels, set topic & purpose, invite
+      - channels:read        # look up channels (name-collision detection, link reconciliation)
+      - chat:write           # post the context / status / closing messages
+      - pins:write           # pin the Jira link in the channel
+      - users:read           # resolve Slack users
+      - users:read.email     # map Jira users to Slack users by email (best-effort)
+
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
