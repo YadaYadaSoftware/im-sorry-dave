@@ -2,12 +2,12 @@ using SorryDave.JiraSync.SmokeTui;
 using SorryDave.JiraSync.SmokeTui.Ui;
 using Terminal.Gui;
 
-var (client, baseUrl) = AppServices.Build(args);
+var targets = AppServices.Build(args);
 
 Application.Init();
 try
 {
-    Application.Run(new MainWindow(client, baseUrl));
+    Application.Run(new MainWindow(targets));
 }
 finally
 {

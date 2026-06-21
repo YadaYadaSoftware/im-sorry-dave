@@ -11,7 +11,7 @@ namespace SorryDave.JiraSync.SmokeTui.Ui;
 /// </summary>
 public class JiraSyncPanel : View
 {
-    private readonly IApiClient _api;
+    private IApiClient _api;
     private readonly ListView _workItems = new() { AllowsMarking = false };
     private readonly ListView _outbox = new() { AllowsMarking = false };
     private readonly ListView _comments = new() { AllowsMarking = false };
@@ -52,6 +52,12 @@ public class JiraSyncPanel : View
 
         Add(backfill, webhook, write, refresh, wiLabel, _workItems, obLabel, _outbox, cmLabel, _comments);
     }
+
+    /// <summary>The API the panel is currently driving (follows target switches).</summary>
+    public IApiClient Client => _api;
+
+    /// <summary>Point the panel at a different API (e.g. after switching target). Caller refreshes.</summary>
+    public void UpdateClient(IApiClient api) => _api = api;
 
     /// <summary>The work item highlighted in the list, or null if there are none.</summary>
     private WorkItemDto? SelectedItem()

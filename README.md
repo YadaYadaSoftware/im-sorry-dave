@@ -127,9 +127,44 @@ dotnet run --project src/SorryDave.JiraSync.SmokeTui
 
 > Run it in a real terminal (it takes over the console) — not through a redirected/headless pipe.
 
-It targets the API base address from configuration (`services:api:http:0` injected by Aspire,
-or `ApiBaseUrl`), defaulting to `http://localhost:5050`. The status bar shows `API: <url>`. So
-start the API first (directly or via the AppHost), then run the console.
+### Choosing the API target (`tui-api-target-selection`)
+
+The console drives one of several configured **targets** — `local` and `aws` ship in
+`appsettings.json`:
+
+```jsonc
+"ApiTargets": {
+  "local": { "BaseUrl": "http://localhost:5050" },
+  "aws":   { "BaseUrl": "https://jsg.appcloud.systems" }
+},
+"ActiveApiTarget": "local"
+```
+
+**Recommended flow — start the AppHost, then choose in the TUI:**
+
+```bash
+dotnet run --project src/SorryDave.JiraSync.AppHost
+```
+
+Press ▶ on the **console** resource in the dashboard. The AppHost injects its API endpoint into the
+TUI, which **folds it into the `local` target** — so the TUI's Target menu is simply **`local`** (the
+AppHost's running API) vs **`aws`** (the deployed one). No second startup, no juggling ports.
+
+- **Switch at runtime:** the **Target** menu lists the targets; selecting one reconnects the panel.
+  The status bar shows `Target: <name> (<url>)`.
+- **Pick at launch (standalone):** `dotnet run --project src/SorryDave.JiraSync.SmokeTui --target aws`.
+- **Selection order:** `--target` > `ActiveApiTarget` > `local` (the AppHost-injected endpoint, when present).
+
+The deployed AWS webhook is **secured**, so "Simulate webhook" against `aws` must send the shared
+secret. Put it in the console's user-secrets (never the repo) — it travels with the target:
+
+```bash
+# value from SSM /jira-sync/Webhook/Secret
+dotnet user-secrets set "ApiTargets:aws:WebhookSecret" "<secret>" --project src/SorryDave.JiraSync.SmokeTui
+```
+
+List/backfill/write-back work against either target; only "Simulate webhook" needs the secret (the
+`local` API accepts unsigned requests). Start the local API first if you're targeting `local`.
 
 What you can do (all via the API):
 

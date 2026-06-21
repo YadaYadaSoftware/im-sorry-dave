@@ -4,14 +4,22 @@ using Terminal.Gui;
 namespace SorryDave.JiraSync.SmokeTui.Ui;
 
 /// <summary>
-/// Top-level shell: a menu, the jira-sync-core panel, and a status bar that shows the API the
-/// console is connected to and the key actions.
+/// Top-level shell: a menu (including a Target menu to switch between configured APIs), the
+/// jira-sync-core panel, and a status bar showing the active target and key actions.
 /// </summary>
 public class MainWindow : Toplevel
 {
-    public MainWindow(IApiClient client, string apiBaseUrl)
+    private readonly ResolvedTargets _targets;
+    private readonly JiraSyncPanel _panel;
+    private readonly StatusBar _status;
+    private string _activeName;
+
+    public MainWindow(ResolvedTargets targets)
     {
-        var panel = new JiraSyncPanel(client)
+        _targets = targets;
+        _activeName = targets.ActiveName;
+
+        _panel = new JiraSyncPanel(AppServices.CreateClient(targets.Active))
         {
             X = 0,
             Y = 0,
@@ -26,16 +34,23 @@ public class MainWindow : Toplevel
             Width = Dim.Fill(),
             Height = Dim.Fill() - 1
         };
-        content.Add(panel);
+        content.Add(_panel);
+
+        // One menu entry per configured target; selecting it switches the active API at runtime.
+        var targetItems = _targets.Targets
+            .OrderBy(kv => kv.Key)
+            .Select(kv => new MenuItem(kv.Key, kv.Value.BaseUrl, () => SwitchTarget(kv.Key)))
+            .ToArray();
 
         var menu = new MenuBar(new MenuBarItem[]
         {
             new MenuBarItem("_Run", new MenuItem[]
             {
-                new MenuItem("_Guided smoke run", "Ctrl-R", () => SmokeRunView.Show(client)),
-                new MenuItem("_Refresh", "F5", () => panel.Refresh()),
+                new MenuItem("_Guided smoke run", "Ctrl-R", () => SmokeRunView.Show(_panel.Client)),
+                new MenuItem("_Refresh", "F5", () => _panel.Refresh()),
                 new MenuItem("_Quit", "Ctrl-Q", () => Application.RequestStop()),
             }),
+            new MenuBarItem("_Target", targetItems),
             new MenuBarItem("_Help", new MenuItem[]
             {
                 new MenuItem("_About", "", () => MessageBox.Query("About",
@@ -43,16 +58,28 @@ public class MainWindow : Toplevel
             }),
         });
 
-        var status = new StatusBar(new StatusItem[]
-        {
-            new StatusItem(Key.F5, "~F5~ Refresh", () => panel.Refresh()),
-            new StatusItem(Key.CtrlMask | Key.R, "~^R~ Smoke run", () => SmokeRunView.Show(client)),
-            new StatusItem(Key.CtrlMask | Key.Q, "~^Q~ Quit", () => Application.RequestStop()),
-            new StatusItem(Key.Null, $"API: {apiBaseUrl}", null),
-        });
+        _status = new StatusBar(BuildStatusItems());
 
-        Add(menu, content, status);
+        Add(menu, content, _status);
 
-        panel.Refresh();
+        _panel.Refresh();
+    }
+
+    private StatusItem[] BuildStatusItems() => new StatusItem[]
+    {
+        new StatusItem(Key.F5, "~F5~ Refresh", () => _panel.Refresh()),
+        new StatusItem(Key.CtrlMask | Key.R, "~^R~ Smoke run", () => SmokeRunView.Show(_panel.Client)),
+        new StatusItem(Key.CtrlMask | Key.Q, "~^Q~ Quit", () => Application.RequestStop()),
+        new StatusItem(Key.Null, $"Target: {_activeName} ({_targets.Targets[_activeName].BaseUrl})", null),
+    };
+
+    private void SwitchTarget(string name)
+    {
+        if (!_targets.Targets.TryGetValue(name, out var target)) return;
+        _activeName = name;
+        _panel.UpdateClient(AppServices.CreateClient(target));
+        _status.Items = BuildStatusItems();
+        _status.SetNeedsDisplay();
+        _panel.Refresh();
     }
 }

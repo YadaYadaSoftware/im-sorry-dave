@@ -8,9 +8,14 @@ namespace SorryDave.JiraSync.SmokeTui.Api;
 public class ApiClient : IApiClient
 {
     private readonly HttpClient _http;
+    private readonly string? _webhookSecret;
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 
-    public ApiClient(HttpClient http) => _http = http;
+    public ApiClient(HttpClient http, string? webhookSecret = null)
+    {
+        _http = http;
+        _webhookSecret = webhookSecret;
+    }
 
     public string BaseAddress => _http.BaseAddress?.ToString() ?? "(unset)";
 
@@ -56,7 +61,13 @@ public class ApiClient : IApiClient
             }
         };
 
-        using var response = await _http.PostAsJsonAsync("webhooks/jira", envelope, Json, ct);
+        // Secured backends (e.g. the deployed AWS API) require the shared secret as ?secret=;
+        // unsecured local backends accept the request without it.
+        var path = string.IsNullOrEmpty(_webhookSecret)
+            ? "webhooks/jira"
+            : "webhooks/jira?secret=" + Uri.EscapeDataString(_webhookSecret);
+
+        using var response = await _http.PostAsJsonAsync(path, envelope, Json, ct);
         response.EnsureSuccessStatusCode();
     }
 

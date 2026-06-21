@@ -25,20 +25,21 @@ of capability panels and a status bar showing the connected API and key actions.
 
 ### Requirement: Connected API is visible
 
-The application SHALL operate against the API resolved from configuration and SHALL display the
-API base address it is connected to, so the user knows which backend (and therefore which Jira)
-their actions reach. The console does not itself choose fake vs. real — it reflects whatever the
-API is configured for.
+The application SHALL operate against the **currently selected API target** and SHALL display that
+target's name and base address in the status bar, so the user knows which backend (and therefore
+which Jira) their actions reach. The console does not itself choose fake vs. real — it reflects
+whatever the selected target's API is configured for — but it does choose **which target** it
+talks to.
 
-#### Scenario: API address shown
+#### Scenario: Active target shown
 
-- **WHEN** the application starts
-- **THEN** the status bar shows the API base address the console is connected to
+- **WHEN** the application starts or the operator switches the target
+- **THEN** the status bar shows the active target's name and base address
 
 #### Scenario: Backend determined by the API
 
 - **WHEN** the user performs an action
-- **THEN** the result reflects the API's configured backend (fake or real Jira), not a mode chosen by the console
+- **THEN** the result reflects the selected target API's configured backend (fake or real Jira), not a mode chosen by the console
 
 ### Requirement: jira-sync-core smoke panel
 

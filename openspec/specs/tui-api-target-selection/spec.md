@@ -1,4 +1,12 @@
-## ADDED Requirements
+# tui-api-target-selection Specification
+
+## Purpose
+
+Let the smoke-test TUI carry connection details for multiple named API targets (the local debugging
+API and the deployed AWS API) and choose which one to drive — at startup and at runtime — so a
+single console can exercise either backend, including the secured webhook endpoint.
+
+## Requirements
 
 ### Requirement: Configured API targets
 
