@@ -41,20 +41,18 @@ public static class ServiceCollectionExtensions
         else
             services.AddRealJira(jira);
 
-        // Slack channel provisioning — registered only when a bot token is configured. The same
-        // instance serves as the explicit-command service and the Jira-event change listener.
+        // Slack channel provisioning. Always registered so the API's /slack endpoints resolve; the
+        // service short-circuits (and the change listener no-ops) when no bot token is configured.
+        // The same instance serves as the explicit-command service and the Jira-event listener.
         var slack = configuration.GetSection(SlackOptions.SectionName).Get<SlackOptions>() ?? new SlackOptions();
-        if (slack.IsConfigured)
+        services.AddHttpClient<ISlackClient, SlackWebApiClient>(client =>
         {
-            services.AddHttpClient<ISlackClient, SlackWebApiClient>(client =>
-            {
-                client.BaseAddress = new Uri("https://slack.com/api/");
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", slack.BotToken);
-            });
-            services.AddScoped<SlackChannelService>();
-            services.AddScoped<ISlackChannelService>(sp => sp.GetRequiredService<SlackChannelService>());
-            services.AddScoped<IWorkItemChangeListener>(sp => sp.GetRequiredService<SlackChannelService>());
-        }
+            client.BaseAddress = new Uri("https://slack.com/api/");
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", slack.BotToken ?? "unconfigured");
+        });
+        services.AddScoped<SlackChannelService>();
+        services.AddScoped<ISlackChannelService>(sp => sp.GetRequiredService<SlackChannelService>());
+        services.AddScoped<IWorkItemChangeListener>(sp => sp.GetRequiredService<SlackChannelService>());
 
         services.AddScoped<IWorkItemSyncService, WorkItemSyncService>();
         services.AddScoped<IMappingStore, MappingStore>();

@@ -34,10 +34,10 @@
 
 - [ ] 6.1 Periodically reconcile channel links against Slack channel state to detect drift
 - [x] 6.2 Unit tests for deterministic naming, collision suffix, and link uniqueness
-- [ ] 6.3 Integration test: work item created → channel provisioned → status change reflected → close archives channel
+- [x] 6.3 Integration test: work item created → channel provisioned → status change reflected → close archives channel
 
 ## 7. Console commands
 
-- [ ] 7.1 Provide `slack provision/archive/unarchive <key>` handlers calling the lifecycle services
-- [ ] 7.2 Provide `slack link <key> <channelId>` and `slack channel <key>` handlers over the mapping store
-- [ ] 7.3 Honor the global `--dry-run` for channel-mutating commands
+- [x] 7.1 Provide `slack provision/archive/unarchive <key>` handlers calling the lifecycle services
+- [x] 7.2 Provide `slack link <key> <channelId>` and `slack channel <key>` handlers over the mapping store
+- [x] 7.3 Honor the global `--dry-run` for channel-mutating commands

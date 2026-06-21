@@ -18,4 +18,16 @@ public interface IApiClient
 
     /// <summary>Fake-mode comments, or null when the API is using a real Jira backend.</summary>
     Task<IReadOnlyList<CommentDto>?> GetFakeCommentsAsync(CancellationToken ct = default);
+
+    /// <summary>Provision/archive/unarchive the work item's Slack channel. <paramref name="dryRun"/>
+    /// reports the intended action without mutating Slack.</summary>
+    Task<SlackResultDto> ProvisionChannelAsync(string workItemKey, bool dryRun, CancellationToken ct = default);
+    Task<SlackResultDto> ArchiveChannelAsync(string workItemKey, bool dryRun, CancellationToken ct = default);
+    Task<SlackResultDto> UnarchiveChannelAsync(string workItemKey, bool dryRun, CancellationToken ct = default);
+
+    /// <summary>The channel name linked to the work item, or null if none.</summary>
+    Task<string?> GetLinkedChannelAsync(string workItemKey, CancellationToken ct = default);
+
+    /// <summary>Link an existing Slack channel id to the work item (rejected on conflict).</summary>
+    Task<SlackResultDto> LinkChannelAsync(string workItemKey, string channelId, CancellationToken ct = default);
 }

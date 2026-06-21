@@ -26,3 +26,6 @@ public record CommentDto(string CommentId, string IssueKey, string Body);
 
 /// <summary>Body for <c>POST /workitems/{key}/writeback</c>. Kind is the enum name, e.g. "Decision".</summary>
 public record WriteBackRequest(string RecordIdentity, string Kind, string Content, string? SourceUrl, string? Author);
+
+/// <summary>Result of a Slack channel command (provision/archive/unarchive).</summary>
+public record SlackResultDto(string Outcome, string? ChannelId, string? ChannelName, string? Detail);

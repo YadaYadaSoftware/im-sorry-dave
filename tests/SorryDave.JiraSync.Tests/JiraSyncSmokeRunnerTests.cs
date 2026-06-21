@@ -65,5 +65,16 @@ public class JiraSyncSmokeRunnerTests
 
         public Task<IReadOnlyList<CommentDto>?> GetFakeCommentsAsync(CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<CommentDto>?>(new List<CommentDto>());
+
+        public Task<SlackResultDto> ProvisionChannelAsync(string workItemKey, bool dryRun, CancellationToken ct = default)
+            => Task.FromResult(new SlackResultDto("NotConfigured", null, null, null));
+        public Task<SlackResultDto> ArchiveChannelAsync(string workItemKey, bool dryRun, CancellationToken ct = default)
+            => Task.FromResult(new SlackResultDto("NotConfigured", null, null, null));
+        public Task<SlackResultDto> UnarchiveChannelAsync(string workItemKey, bool dryRun, CancellationToken ct = default)
+            => Task.FromResult(new SlackResultDto("NotConfigured", null, null, null));
+        public Task<string?> GetLinkedChannelAsync(string workItemKey, CancellationToken ct = default)
+            => Task.FromResult<string?>(null);
+        public Task<SlackResultDto> LinkChannelAsync(string workItemKey, string channelId, CancellationToken ct = default)
+            => Task.FromResult(new SlackResultDto("Linked", channelId, null, null));
     }
 }

@@ -79,6 +79,36 @@ public class ApiClient : IApiClient
         return await response.Content.ReadFromJsonAsync<List<CommentDto>>(Json, ct) ?? new();
     }
 
+    public Task<SlackResultDto> ProvisionChannelAsync(string workItemKey, bool dryRun, CancellationToken ct = default)
+        => PostSlackAsync($"slack/{Uri.EscapeDataString(workItemKey)}/provision?dryRun={Lower(dryRun)}", ct);
+
+    public Task<SlackResultDto> ArchiveChannelAsync(string workItemKey, bool dryRun, CancellationToken ct = default)
+        => PostSlackAsync($"slack/{Uri.EscapeDataString(workItemKey)}/archive?dryRun={Lower(dryRun)}", ct);
+
+    public Task<SlackResultDto> UnarchiveChannelAsync(string workItemKey, bool dryRun, CancellationToken ct = default)
+        => PostSlackAsync($"slack/{Uri.EscapeDataString(workItemKey)}/unarchive?dryRun={Lower(dryRun)}", ct);
+
+    public async Task<string?> GetLinkedChannelAsync(string workItemKey, CancellationToken ct = default)
+    {
+        var dto = await _http.GetFromJsonAsync<ChannelLinkDto>(
+            $"slack/{Uri.EscapeDataString(workItemKey)}/channel", Json, ct);
+        return dto?.ChannelName;
+    }
+
+    public Task<SlackResultDto> LinkChannelAsync(string workItemKey, string channelId, CancellationToken ct = default)
+        => PostSlackAsync($"slack/{Uri.EscapeDataString(workItemKey)}/link?channelId={Uri.EscapeDataString(channelId)}", ct);
+
+    private async Task<SlackResultDto> PostSlackAsync(string path, CancellationToken ct)
+    {
+        using var response = await _http.PostAsync(path, content: null, ct);
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<SlackResultDto>(Json, ct))!;
+    }
+
+    private static string Lower(bool b) => b ? "true" : "false";
+
+    private record ChannelLinkDto(string WorkItemKey, string? ChannelId, string? ChannelName);
+
     private async Task<int> PostForIntAsync(string path, string property, CancellationToken ct)
     {
         using var response = await _http.PostAsync(path, content: null, ct);

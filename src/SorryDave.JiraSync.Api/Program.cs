@@ -60,6 +60,7 @@ app.MapGet("/", () => Results.Ok(new { service = "jira-sync-core", status = "ok"
 app.MapWebhookEndpoints();
 app.MapWorkItemEndpoints();
 app.MapAdminEndpoints();
+app.MapSlackEndpoints();
 
 app.Run();
 

@@ -59,6 +59,78 @@ public class JiraSyncPanel : View
     /// <summary>Point the panel at a different API (e.g. after switching target). Caller refreshes.</summary>
     public void UpdateClient(IApiClient api) => _api = api;
 
+    // Slack channel commands for the selected work item (call the API's /slack endpoints).
+    public void ProvisionSlack(bool dryRun) => RunSlack((api, key, ct) => api.ProvisionChannelAsync(key, dryRun, ct), "Slack provision");
+    public void ArchiveSlack(bool dryRun) => RunSlack((api, key, ct) => api.ArchiveChannelAsync(key, dryRun, ct), "Slack archive");
+    public void UnarchiveSlack(bool dryRun) => RunSlack((api, key, ct) => api.UnarchiveChannelAsync(key, dryRun, ct), "Slack unarchive");
+
+    public void ShowSlackChannel()
+    {
+        var target = SelectedItem();
+        if (target is null) { NoSelection("Slack channel"); return; }
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var name = await _api.GetLinkedChannelAsync(target.Key);
+                Application.MainLoop.Invoke(() => MessageBox.Query("Slack channel",
+                    name is null ? $"No channel linked to {target.Key}." : $"{target.Key} -> #{name}", "OK"));
+            }
+            catch (Exception ex) { ShowError("Slack channel", ex); }
+        });
+    }
+
+    public void LinkSlack()
+    {
+        var target = SelectedItem();
+        if (target is null) { NoSelection("Slack link"); return; }
+
+        var input = new TextField("") { X = 1, Y = 1, Width = Dim.Fill() - 2 };
+        var submitted = false;
+        var ok = new Button("Link") { IsDefault = true };
+        ok.Clicked += () => { submitted = true; Application.RequestStop(); };
+        var cancel = new Button("Cancel");
+        cancel.Clicked += () => Application.RequestStop();
+
+        var dialog = new Dialog($"Link a Slack channel to {target.Key}", 70, 8, ok, cancel);
+        dialog.Add(new Label("Slack channel id (e.g. C0123ABCD):") { X = 1, Y = 0 }, input);
+        Application.Run(dialog);
+
+        if (!submitted) return;
+        var channelId = input.Text?.ToString();
+        if (string.IsNullOrWhiteSpace(channelId)) return;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var result = await _api.LinkChannelAsync(target.Key, channelId!.Trim());
+                Application.MainLoop.Invoke(() => MessageBox.Query("Slack link",
+                    $"{result.Outcome}: #{result.ChannelName ?? result.ChannelId}", "OK"));
+                await LoadAsync();
+            }
+            catch (Exception ex) { ShowError("Slack link", ex); }
+        });
+    }
+
+    private void RunSlack(Func<IApiClient, string, CancellationToken, Task<SlackResultDto>> action, string label)
+    {
+        var target = SelectedItem();
+        if (target is null) { NoSelection(label); return; }
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var result = await action(_api, target.Key, default);
+                var detail = result.ChannelName is not null ? $"#{result.ChannelName}" : result.Detail;
+                Application.MainLoop.Invoke(() => MessageBox.Query(label,
+                    detail is null ? result.Outcome : $"{result.Outcome}: {detail}", "OK"));
+                await LoadAsync();
+            }
+            catch (Exception ex) { ShowError(label, ex); }
+        });
+    }
+
     /// <summary>The work item highlighted in the list, or null if there are none.</summary>
     private WorkItemDto? SelectedItem()
     {

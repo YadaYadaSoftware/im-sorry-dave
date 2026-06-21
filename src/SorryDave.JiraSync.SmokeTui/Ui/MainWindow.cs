@@ -13,6 +13,7 @@ public class MainWindow : Toplevel
     private readonly JiraSyncPanel _panel;
     private readonly StatusBar _status;
     private string _activeName;
+    private bool _dryRun;
 
     public MainWindow(ResolvedTargets targets)
     {
@@ -51,6 +52,7 @@ public class MainWindow : Toplevel
                 new MenuItem("_Quit", "Ctrl-Q", () => Application.RequestStop()),
             }),
             new MenuBarItem("_Target", targetItems),
+            new MenuBarItem("_Slack", BuildSlackMenu()),
             new MenuBarItem("_Help", new MenuItem[]
             {
                 new MenuItem("_About", "", () => MessageBox.Query("About",
@@ -72,6 +74,26 @@ public class MainWindow : Toplevel
         new StatusItem(Key.CtrlMask | Key.Q, "~^Q~ Quit", () => Application.RequestStop()),
         new StatusItem(Key.Null, $"Target: {_activeName} ({_targets.Targets[_activeName].BaseUrl})", null),
     };
+
+    private MenuItem[] BuildSlackMenu()
+    {
+        var dryRun = new MenuItem("Toggle _dry-run", "", null)
+        {
+            CheckType = MenuItemCheckStyle.Checked,
+            Checked = _dryRun,
+        };
+        dryRun.Action = () => { _dryRun = !_dryRun; dryRun.Checked = _dryRun; };
+
+        return new[]
+        {
+            new MenuItem("_Provision channel", "", () => _panel.ProvisionSlack(_dryRun)),
+            new MenuItem("_Archive channel", "", () => _panel.ArchiveSlack(_dryRun)),
+            new MenuItem("_Unarchive channel", "", () => _panel.UnarchiveSlack(_dryRun)),
+            new MenuItem("_Link existing channel", "", () => _panel.LinkSlack()),
+            new MenuItem("_Show linked channel", "", () => _panel.ShowSlackChannel()),
+            dryRun,
+        };
+    }
 
     private void SwitchTarget(string name)
     {
