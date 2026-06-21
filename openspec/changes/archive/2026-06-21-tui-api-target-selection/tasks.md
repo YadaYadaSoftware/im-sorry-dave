@@ -32,8 +32,8 @@
 ## 6. Configure & verify
 
 - [x] 6.1 Set the AWS webhook secret in the TUI user-secrets (`ApiTargets:aws:WebhookSecret`)
-- [ ] 6.2 Verify `local`: list work items and simulate a webhook against the local API
-- [ ] 6.3 Verify `aws`: switch target at runtime, list MDP work items, and simulate a webhook (the secured endpoint accepts it)
+- [x] 6.2 Verify `local`: list work items and simulate a webhook against the local API
+- [x] 6.3 Verify `aws`: switch target at runtime, list MDP work items, and simulate a webhook (the secured endpoint accepts it)
 
 ## 7. Docs
 
