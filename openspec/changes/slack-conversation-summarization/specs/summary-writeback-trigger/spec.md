@@ -21,22 +21,55 @@ The system SHALL require human confirmation in Slack before any decision or answ
 
 ### Requirement: Explicit summarization triggers
 
-The system SHALL summarize a conversation only on an explicit trigger — a Slack slash command, or reacting to a message/thread with a configured emoji — and present the resulting candidates for confirmation. Fully automatic (unsolicited) extraction is out of scope for this version.
+The system SHALL summarize a conversation only on an explicit trigger — the **`/post` slash command**,
+or reacting to a message/thread with a configured emoji — and present the resulting candidates for
+confirmation. Fully automatic (unsolicited) extraction is out of scope for this version.
 
-#### Scenario: Summarize command invoked
+#### Scenario: `/post` command invoked
 
-- **WHEN** a user invokes the summarize command in a work-item channel
-- **THEN** the system runs extraction over the relevant conversation window and presents the resulting candidates in the channel
+- **WHEN** a user runs `/post` in a work-item channel
+- **THEN** the system runs extraction over the conversation window since the last successful `/post`
+  (see the window requirement) and presents the resulting candidates in the channel
 
 #### Scenario: Summarize via emoji reaction
 
 - **WHEN** a user reacts to a message or thread in a work-item channel with the configured summarize emoji
 - **THEN** the system runs extraction over that thread/window and presents the resulting candidates
 
-#### Scenario: Trigger used in unlinked channel
+#### Scenario: `/post` used in unlinked channel
 
-- **WHEN** a summarize trigger fires in a channel not linked to a work item
+- **WHEN** `/post` (or another summarize trigger) fires in a channel not linked to a work item
 - **THEN** the system responds that the channel is not linked and performs no write-back
+
+### Requirement: Summarization window is the conversation since the last `/post`
+
+The `/post` command SHALL summarize the messages posted in the channel **since the previous
+successful `/post`** in that channel, so each `/post` covers only the new conversation and
+consecutive posts do not re-summarize already-posted content. The system SHALL track a per-channel
+cursor marking the point of the last successful `/post`, and SHALL advance it only when a `/post`
+completes its write-back. On the first ever `/post` in a channel (no prior cursor), the window SHALL
+be the channel's conversation from its creation.
+
+#### Scenario: Window covers messages since the last post
+
+- **WHEN** a user runs `/post` and a previous successful `/post` exists in the channel
+- **THEN** the extraction window is the messages posted after the previous `/post`'s cursor, up to now
+
+#### Scenario: First post covers the whole conversation
+
+- **WHEN** a user runs `/post` in a channel that has never had a successful `/post`
+- **THEN** the extraction window is the channel's conversation from its creation up to now
+
+#### Scenario: Cursor advances only on success
+
+- **WHEN** a `/post` completes its write-back successfully
+- **THEN** the per-channel cursor advances to that point, so the next `/post` starts from there
+
+#### Scenario: Cursor not advanced on no-op or failure
+
+- **WHEN** a `/post` produces no confirmed write-back (nothing to post, all candidates rejected, or a
+  failure)
+- **THEN** the cursor does not advance, so the next `/post` still covers the same window
 
 ### Requirement: Write-back is idempotent and attributed
 

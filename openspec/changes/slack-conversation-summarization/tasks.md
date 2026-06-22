@@ -20,8 +20,9 @@
 ## 4. Confirmation & commands
 
 - [ ] 4.1 Present candidates in Slack as interactive messages (confirm / edit / reject)
-- [ ] 4.2 Implement the explicit summarize triggers: slash command and the configured emoji-reaction cue (thread/channel window)
-- [ ] 4.3 Handle the command/confirmation in unlinked channels gracefully
+- [ ] 4.2 Implement the explicit summarize triggers: the **`/post`** slash command and the configured emoji-reaction cue
+- [ ] 4.3 Implement the `/post` window: a **per-channel cursor** of the last successful `/post`; window = messages since that cursor (whole conversation on first post); advance the cursor only on a successful write-back, never on a no-op/rejected/failed post
+- [ ] 4.4 Handle the command/confirmation in unlinked channels gracefully
 
 ## 5. Write-back integration
 
