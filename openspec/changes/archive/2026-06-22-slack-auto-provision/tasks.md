@@ -34,7 +34,7 @@
 
 ## 5. Deploy & verify
 
-- [ ] 5.1 Deploy; create a new eligible MDP item in Jira and confirm a channel auto-provisions with
+- [x] 5.1 Deploy; create a new eligible MDP item in Jira and confirm a channel auto-provisions with
       the pinned title+link message, a description message, and the creator invited
 
 ## 6. Docs & conflict follow-ups

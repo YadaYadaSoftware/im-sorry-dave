@@ -3,36 +3,6 @@
 ## Purpose
 TBD - created by archiving change slack-channel-provisioning. Update Purpose after archive.
 ## Requirements
-### Requirement: Provision a channel lazily on explicit request
-
-The system SHALL create a Slack channel for a work item only on an explicit request to discuss it — not for every tracked item — and only for configured discussion-worthy issue types. An explicit request is a console/slash command, a "Discuss in Slack" action, or a bot @mention of the item. Provisioned channels SHALL be public by default. The channel name SHALL be the work-item key followed by a hyphen and a short slug of the work item's summary, normalized to Slack's naming rules, and the channel is seeded with the work item's context.
-
-#### Scenario: Channel created on explicit request
-
-- **WHEN** an explicit request fires for an eligible work item that has no linked channel
-- **THEN** the system creates a public Slack channel named `<jira-key>-<short-summary-slug>`
-- **AND** posts an initial context message containing the key, summary, type, status, assignee, and a link to the Jira issue
-
-#### Scenario: Channel name normalized to Slack rules
-
-- **WHEN** the channel name is derived (e.g., MDP-7 "Build Slack Channel")
-- **THEN** it is lowercased with non-alphanumeric runs reduced to single hyphens (e.g., `mdp-7-build-slack-channel`), the work-item key is preserved, and the summary slug is truncated so the whole name stays within Slack's length limit
-
-#### Scenario: No channel for untriggered or out-of-scope items
-
-- **WHEN** a work item is tracked but no provisioning trigger has occurred, or its issue type is outside the configured scope
-- **THEN** the system does not create a Slack channel for it
-
-#### Scenario: Channel name collision resolved deterministically
-
-- **WHEN** the derived channel name already exists for a different work item
-- **THEN** the system applies a deterministic disambiguation suffix and records the actual channel created
-
-#### Scenario: No duplicate channel created
-
-- **WHEN** a work item already has a linked, non-archived Slack channel
-- **THEN** the system does not create another channel for it
-
 ### Requirement: Channel lifecycle follows work-item state
 
 The system SHALL archive a work item's channel when the item reaches a terminal/closed state and SHALL re-activate (unarchive) it if the item reopens.
@@ -50,17 +20,26 @@ The system SHALL archive a work item's channel when the item reaches a terminal/
 
 ### Requirement: Channel membership management
 
-The system SHALL ensure relevant participants (e.g., assignee, reporter) have access to the work item's channel where their Slack identity is resolvable.
+The system SHALL invite relevant participants to a work item's channel where their Slack identity is
+resolvable — a configured watcher list, the assignee, the item's **creator** (Jira reporter), and
+every user **@mentioned in the item's description** — skipping any participant whose Slack identity
+cannot be resolved.
 
-#### Scenario: Assignee invited to channel
+#### Scenario: Creator and mentioned users invited on creation
 
-- **WHEN** a channel is created or the assignee changes and the assignee's Slack identity is known
+- **WHEN** a channel is created for a work item
+- **THEN** the system invites the item's creator and every user @mentioned in the description whose
+  Slack identity resolves, in addition to the assignee and the configured watcher list
+
+#### Scenario: Assignee invited when assignment changes
+
+- **WHEN** a channel exists and the assignee changes and the new assignee's Slack identity is known
 - **THEN** the system invites the assignee to the channel
 
 #### Scenario: Unresolvable identity handled gracefully
 
 - **WHEN** a participant's Slack identity cannot be resolved
-- **THEN** the system continues provisioning without failing and records that the invite was skipped
+- **THEN** the system continues without failing and records that the invite was skipped
 
 ### Requirement: Console commands drive channel provisioning
 
@@ -75,4 +54,49 @@ The console application SHALL provide commands to provision, archive, and unarch
 
 - **WHEN** the operator runs the slack archive command for a work-item key
 - **THEN** the console archives the linked channel, honoring `--dry-run`
+
+### Requirement: Provision a channel automatically on work-item creation
+
+The system SHALL create a Slack channel for a work item **automatically when the item is created**
+(the inbound `jira:issue_created` event), for configured discussion-worthy issue types, without an
+explicit request. Explicit provisioning (console/slash command) SHALL remain available and
+idempotent. Provisioned channels SHALL be public by default and named `<jira-key>-<short-summary-slug>`
+(normalized to Slack's rules), and the channel SHALL be seeded with two welcome messages: a **pinned**
+header containing the work item's title and a link to the Jira issue, and a second message containing
+the work item's description.
+
+#### Scenario: Channel created on work-item creation
+
+- **WHEN** a new eligible work item is created
+- **THEN** the system automatically creates a public Slack channel named `<jira-key>-<short-summary-slug>`
+  and records the channel ↔ work-item link
+
+#### Scenario: Welcome messages seed the channel
+
+- **WHEN** a channel is created for a work item
+- **THEN** the system posts a header message with the work item's title and a link to the Jira issue
+  and **pins** it, and posts a second message containing the work item's description
+
+#### Scenario: Out-of-scope issue types get no channel
+
+- **WHEN** a work item whose issue type is outside the configured scope is created
+- **THEN** the system does not create a Slack channel for it
+
+#### Scenario: Explicit provisioning remains available and idempotent
+
+- **WHEN** an operator runs the provision command for a work item that already has a (e.g.
+  auto-provisioned) channel
+- **THEN** the system reports the existing channel and does not create a duplicate
+
+#### Scenario: Channel name normalized to Slack rules
+
+- **WHEN** the channel name is derived (e.g., MDP-7 "Build Slack Channel")
+- **THEN** it is lowercased with non-alphanumeric runs reduced to single hyphens (e.g.,
+  `mdp-7-build-slack-channel`), the work-item key preserved, and the summary slug truncated within
+  Slack's length limit
+
+#### Scenario: Channel name collision resolved deterministically
+
+- **WHEN** the derived channel name already exists for a different work item
+- **THEN** the system applies a deterministic disambiguation suffix and records the actual channel created
 
