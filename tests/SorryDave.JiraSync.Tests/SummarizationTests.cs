@@ -142,6 +142,37 @@ public class ConversationSummarizerTests
         Assert.Single(writeback.Submitted.Where(s => s.RecordIdentity == identity));
     }
 
+    [Fact]
+    public async Task Smoke_summarize_extracts_from_provided_lines_without_a_channel()
+    {
+        using var db = new TestDb();
+        var (svc, writeback) = Build(db, linkChannel: false); // no Slack channel needed
+
+        var result = await svc.SmokeSummarizeAsync("MDP-7", new[]
+        {
+            new TranscriptLine("alice", "we decided to ship Friday", ""),
+            new TranscriptLine("bob", "should we update the docs?", ""),
+        });
+
+        Assert.Equal("Extracted", result.Outcome);
+        Assert.Contains(result.Candidates, c => c.Kind == WriteBackKind.Decision);
+
+        // Confirming a smoke candidate writes back but touches no channel cursor.
+        var decision = result.Candidates.First(c => c.Kind == WriteBackKind.Decision);
+        Assert.Equal("Confirmed", await svc.ConfirmAsync(decision.Id, "tui"));
+        Assert.Single(writeback.Submitted);
+        Assert.Equal(0, await db.NewContext().PostCursors.CountAsync());
+    }
+
+    [Fact]
+    public async Task Smoke_summarize_unknown_work_item_is_reported()
+    {
+        using var db = new TestDb();
+        var (svc, _) = Build(db, linkChannel: false);
+        var result = await svc.SmokeSummarizeAsync("NOPE-1", new[] { new TranscriptLine("a", "hi", "") });
+        Assert.Equal("NotFound", result.Outcome);
+    }
+
     private async Task Capture(IConversationSummarizer svc, string ts, string text)
         => await svc.CaptureAsync(new IncomingMessage(Channel, ts, null, "U1", text));
 

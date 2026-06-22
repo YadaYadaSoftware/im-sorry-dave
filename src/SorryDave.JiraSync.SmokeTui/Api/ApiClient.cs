@@ -98,6 +98,28 @@ public class ApiClient : IApiClient
     public Task<SlackResultDto> LinkChannelAsync(string workItemKey, string channelId, CancellationToken ct = default)
         => PostSlackAsync($"slack/{Uri.EscapeDataString(workItemKey)}/link?channelId={Uri.EscapeDataString(channelId)}", ct);
 
+    public async Task<SummarizeResultDto> SummarizeAsync(string workItemKey, IReadOnlyList<(string Author, string Text)> lines, CancellationToken ct = default)
+    {
+        var body = new { workItemKey, lines = lines.Select(l => new { author = l.Author, text = l.Text }) };
+        using var response = await _http.PostAsJsonAsync("admin/summarize", body, Json, ct);
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<SummarizeResultDto>(Json, ct))!;
+    }
+
+    public async Task<string> ConfirmCandidateAsync(Guid id, CancellationToken ct = default)
+        => await PostOutcomeAsync($"admin/summarize/candidates/{id}/confirm", ct);
+
+    public async Task<string> RejectCandidateAsync(Guid id, CancellationToken ct = default)
+        => await PostOutcomeAsync($"admin/summarize/candidates/{id}/reject", ct);
+
+    private async Task<string> PostOutcomeAsync(string path, CancellationToken ct)
+    {
+        using var response = await _http.PostAsync(path, content: null, ct);
+        response.EnsureSuccessStatusCode();
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        return doc.RootElement.TryGetProperty("outcome", out var v) ? v.GetString() ?? "?" : "?";
+    }
+
     private async Task<SlackResultDto> PostSlackAsync(string path, CancellationToken ct)
     {
         using var response = await _http.PostAsync(path, content: null, ct);

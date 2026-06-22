@@ -30,4 +30,10 @@ public interface IApiClient
 
     /// <summary>Link an existing Slack channel id to the work item (rejected on conflict).</summary>
     Task<SlackResultDto> LinkChannelAsync(string workItemKey, string channelId, CancellationToken ct = default);
+
+    /// <summary>Smoke-test summarization: extract candidates from a provided conversation (uses the
+    /// real Claude extractor when the API has an Anthropic key, otherwise the fake).</summary>
+    Task<SummarizeResultDto> SummarizeAsync(string workItemKey, IReadOnlyList<(string Author, string Text)> lines, CancellationToken ct = default);
+    Task<string> ConfirmCandidateAsync(Guid id, CancellationToken ct = default);
+    Task<string> RejectCandidateAsync(Guid id, CancellationToken ct = default);
 }

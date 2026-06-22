@@ -53,6 +53,10 @@ public class MainWindow : Toplevel
             }),
             new MenuBarItem("_Target", targetItems),
             new MenuBarItem("_Slack", BuildSlackMenu()),
+            new MenuBarItem("S_ummarize", new[]
+            {
+                new MenuItem("_Summarize conversation", "", () => _panel.SummarizeSmoke()),
+            }),
             new MenuBarItem("_Help", new MenuItem[]
             {
                 new MenuItem("_About", "", () => MessageBox.Query("About",

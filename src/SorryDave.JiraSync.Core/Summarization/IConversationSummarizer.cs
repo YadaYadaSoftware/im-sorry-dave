@@ -22,6 +22,10 @@ public interface IConversationSummarizer
     /// <summary>Run <c>/post</c>: extract candidates over the messages since the last successful post.</summary>
     Task<PostResult> PostAsync(string channelId, CancellationToken ct = default);
 
+    /// <summary>Smoke path (no Slack): extract candidates from operator-provided lines for a work item
+    /// and persist them, so the extractor (real Claude when keyed) can be exercised from the TUI.</summary>
+    Task<PostResult> SmokeSummarizeAsync(string workItemKey, IReadOnlyList<TranscriptLine> lines, CancellationToken ct = default);
+
     /// <summary>Confirm a candidate → Jira write-back; advances the channel cursor on success.</summary>
     Task<string> ConfirmAsync(Guid candidateId, string? confirmingUser, CancellationToken ct = default);
 

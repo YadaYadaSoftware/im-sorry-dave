@@ -29,3 +29,9 @@ public record WriteBackRequest(string RecordIdentity, string Kind, string Conten
 
 /// <summary>Result of a Slack channel command (provision/archive/unarchive).</summary>
 public record SlackResultDto(string Outcome, string? ChannelId, string? ChannelName, string? Detail);
+
+/// <summary>An extracted summarization candidate awaiting confirmation.</summary>
+public record CandidateDto(Guid Id, string WorkItemKey, string Kind, string Content, string? Evidence, double Confidence, string Status);
+
+/// <summary>Result of a smoke summarize call.</summary>
+public record SummarizeResultDto(string Outcome, string? Detail, List<CandidateDto> Candidates);

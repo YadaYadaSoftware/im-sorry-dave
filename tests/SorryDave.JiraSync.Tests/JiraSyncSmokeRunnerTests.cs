@@ -76,5 +76,9 @@ public class JiraSyncSmokeRunnerTests
             => Task.FromResult<string?>(null);
         public Task<SlackResultDto> LinkChannelAsync(string workItemKey, string channelId, CancellationToken ct = default)
             => Task.FromResult(new SlackResultDto("Linked", channelId, null, null));
+        public Task<SummarizeResultDto> SummarizeAsync(string workItemKey, IReadOnlyList<(string Author, string Text)> lines, CancellationToken ct = default)
+            => Task.FromResult(new SummarizeResultDto("Extracted", null, new()));
+        public Task<string> ConfirmCandidateAsync(Guid id, CancellationToken ct = default) => Task.FromResult("Confirmed");
+        public Task<string> RejectCandidateAsync(Guid id, CancellationToken ct = default) => Task.FromResult("Rejected");
     }
 }

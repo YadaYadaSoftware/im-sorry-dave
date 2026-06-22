@@ -125,6 +125,38 @@ public sealed class ConversationSummarizer : IConversationSummarizer
         return new("Extracted", candidates);
     }
 
+    public async Task<PostResult> SmokeSummarizeAsync(string workItemKey, IReadOnlyList<TranscriptLine> lines, CancellationToken ct = default)
+    {
+        var item = await _db.WorkItems.FirstOrDefaultAsync(w => w.Key == workItemKey, ct);
+        if (item is null)
+            return new("NotFound", Array.Empty<SummaryCandidate>(), $"Work item {workItemKey} not found.");
+        if (lines.Count == 0)
+            return new("Empty", Array.Empty<SummaryCandidate>(), "No conversation provided.");
+
+        var redacted = lines.Select(l => l with { Text = _redactor.Redact(l.Text) }).ToList();
+        var extracted = await _extractor.ExtractAsync(workItemKey, redacted, ct);
+
+        var candidates = extracted.Select(e => new SummaryCandidate
+        {
+            Id = Guid.NewGuid(),
+            ChannelId = $"smoke:{workItemKey}",
+            WorkItemKey = workItemKey,
+            Kind = e.Kind,
+            Content = _redactor.Redact(e.Content),
+            Evidence = _redactor.Redact(e.Evidence ?? ""),
+            Confidence = e.Confidence,
+            RecordIdentity = $"smoke:{workItemKey}:{(int)e.Kind}:{StableHash(e.Content)}",
+            Status = CandidateStatus.Pending,
+            WindowFromTs = null, // smoke: not tied to a channel window, so confirm won't move a cursor
+            WindowToTs = null,
+            CreatedUtc = _clock.GetUtcNow(),
+        }).ToList();
+
+        _db.SummaryCandidates.AddRange(candidates);
+        await _db.SaveChangesAsync(ct);
+        return new("Extracted", candidates);
+    }
+
     public async Task<string> ConfirmAsync(Guid candidateId, string? confirmingUser, CancellationToken ct = default)
     {
         var candidate = await _db.SummaryCandidates.FirstOrDefaultAsync(c => c.Id == candidateId, ct);

@@ -37,6 +37,7 @@ else
     {
         ("Slack:BotToken", "/jira-sync/Slack/BotToken"),
         ("Slack:SigningSecret", "/jira-sync/Slack/SigningSecret"),
+        ("Anthropic:ApiKey", "/jira-sync/Anthropic/ApiKey"),
     };
     var toTransport = transportable.Where(p => !string.IsNullOrWhiteSpace(builder.Configuration[p.Key])).ToArray();
     if (toTransport.Length > 0)

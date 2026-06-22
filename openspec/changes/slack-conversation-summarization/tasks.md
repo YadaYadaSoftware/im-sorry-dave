@@ -38,6 +38,6 @@
 
 ## 7. Console commands
 
-- [ ] 7.1 Provide a `summarize <key|channel> [--window]` handler that runs extraction and prints candidates
-- [ ] 7.2 Provide `candidates list <key>` and `candidates confirm/reject <id>` handlers
-- [ ] 7.3 Route console confirmations through `jira-decision-writeback`, honoring `--dry-run`
+- [x] 7.1 Provide a `summarize <key|channel> [--window]` handler that runs extraction and prints candidates
+- [x] 7.2 Provide `candidates list <key>` and `candidates confirm/reject <id>` handlers
+- [x] 7.3 Route console confirmations through `jira-decision-writeback`, honoring `--dry-run`

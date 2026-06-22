@@ -113,6 +113,86 @@ public class JiraSyncPanel : View
         });
     }
 
+    /// <summary>Smoke-test summarization: type a short conversation for the selected item, send it to
+    /// the API's summarizer (real Claude when keyed), and show + confirm/reject the candidates.</summary>
+    public void SummarizeSmoke()
+    {
+        var target = SelectedItem();
+        if (target is null) { NoSelection("Summarize"); return; }
+
+        var input = new TextView { X = 1, Y = 1, Width = Dim.Fill() - 2, Height = Dim.Fill() - 3 };
+        input.Text = "alice: we decided to ship Friday\nbob: should we update the docs?";
+        var submitted = false;
+        var ok = new Button("Summarize") { IsDefault = true };
+        ok.Clicked += () => { submitted = true; Application.RequestStop(); };
+        var cancel = new Button("Cancel");
+        cancel.Clicked += () => Application.RequestStop();
+
+        var dialog = new Dialog($"Summarize conversation for {target.Key}  (one 'author: text' per line)", 78, 16, ok, cancel);
+        dialog.Add(input);
+        Application.Run(dialog);
+        if (!submitted) return;
+
+        var lines = (input.Text?.ToString() ?? "")
+            .Replace("\r", "").Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(l =>
+            {
+                var i = l.IndexOf(':');
+                return i > 0 ? (Author: l[..i].Trim(), Text: l[(i + 1)..].Trim()) : (Author: "user", Text: l.Trim());
+            })
+            .Where(l => l.Text.Length > 0).ToList<(string Author, string Text)>();
+        if (lines.Count == 0) return;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var result = await _api.SummarizeAsync(target.Key, lines);
+                Application.MainLoop.Invoke(() => ShowCandidates(target.Key, result));
+            }
+            catch (Exception ex) { ShowError("Summarize", ex); }
+        });
+    }
+
+    private void ShowCandidates(string key, SummarizeResultDto result)
+    {
+        if (result.Candidates.Count == 0)
+        {
+            MessageBox.Query("Summarize", $"{result.Outcome}: {result.Detail ?? "no candidates"}", "OK");
+            return;
+        }
+
+        var list = new ListView(result.Candidates
+            .Select(c => $"[{c.Kind}] ({c.Confidence:0.0}) {FirstLine(c.Content)}").ToList())
+        { X = 1, Y = 1, Width = Dim.Fill() - 2, Height = Dim.Fill() - 3 };
+
+        var confirm = new Button("_Confirm → Jira") { IsDefault = true };
+        var reject = new Button("_Reject");
+        var close = new Button("Close");
+        var dialog = new Dialog($"Candidates for {key} — confirm writes back to Jira", 90, 18, confirm, reject, close);
+        dialog.Add(list);
+
+        confirm.Clicked += () => ActOnCandidate(result, list.SelectedItem, confirmIt: true);
+        reject.Clicked += () => ActOnCandidate(result, list.SelectedItem, confirmIt: false);
+        close.Clicked += () => Application.RequestStop();
+        Application.Run(dialog);
+    }
+
+    private void ActOnCandidate(SummarizeResultDto result, int index, bool confirmIt)
+    {
+        if (index < 0 || index >= result.Candidates.Count) return;
+        var id = result.Candidates[index].Id;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var outcome = confirmIt ? await _api.ConfirmCandidateAsync(id) : await _api.RejectCandidateAsync(id);
+                Application.MainLoop.Invoke(() => MessageBox.Query("Candidate", outcome, "OK"));
+            }
+            catch (Exception ex) { ShowError("Candidate", ex); }
+        });
+    }
+
     private void RunSlack(Func<IApiClient, string, CancellationToken, Task<SlackResultDto>> action, string label)
     {
         var target = SelectedItem();
