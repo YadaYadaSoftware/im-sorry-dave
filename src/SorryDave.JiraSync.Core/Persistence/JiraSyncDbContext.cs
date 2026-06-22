@@ -11,6 +11,9 @@ public class JiraSyncDbContext : DbContext
     public DbSet<WorkItem> WorkItems => Set<WorkItem>();
     public DbSet<ResourceMapping> ResourceMappings => Set<ResourceMapping>();
     public DbSet<WriteBackRecord> WriteBackRecords => Set<WriteBackRecord>();
+    public DbSet<CapturedMessage> CapturedMessages => Set<CapturedMessage>();
+    public DbSet<SummaryCandidate> SummaryCandidates => Set<SummaryCandidate>();
+    public DbSet<PostCursor> PostCursors => Set<PostCursor>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -58,6 +61,28 @@ public class JiraSyncDbContext : DbContext
             // Identity of a logical record — resubmission edits in place.
             b.HasIndex(r => new { r.WorkItemKey, r.RecordIdentity }).IsUnique();
             b.HasIndex(r => new { r.Status, r.NextAttemptUtc });
+        });
+
+        modelBuilder.Entity<CapturedMessage>(b =>
+        {
+            b.HasKey(m => m.Id);
+            b.Property(m => m.ChannelId).HasMaxLength(64);
+            b.Property(m => m.Ts).HasMaxLength(32);
+            // One row per (channel, ts) — redelivery is an upsert; window queries order by ts.
+            b.HasIndex(m => new { m.ChannelId, m.Ts }).IsUnique();
+        });
+
+        modelBuilder.Entity<SummaryCandidate>(b =>
+        {
+            b.HasKey(c => c.Id);
+            b.Property(c => c.RecordIdentity).HasMaxLength(256);
+            b.HasIndex(c => new { c.WorkItemKey, c.Status });
+        });
+
+        modelBuilder.Entity<PostCursor>(b =>
+        {
+            b.HasKey(c => c.ChannelId);
+            b.Property(c => c.ChannelId).HasMaxLength(64);
         });
     }
 }

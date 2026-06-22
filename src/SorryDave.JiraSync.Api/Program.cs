@@ -61,6 +61,7 @@ app.MapWebhookEndpoints();
 app.MapWorkItemEndpoints();
 app.MapAdminEndpoints();
 app.MapSlackEndpoints();
+app.MapSlackEventEndpoints();
 
 app.Run();
 

@@ -10,6 +10,7 @@ using SorryDave.JiraSync.Core.Jira;
 using SorryDave.JiraSync.Core.Mapping;
 using SorryDave.JiraSync.Core.Persistence;
 using SorryDave.JiraSync.Core.Slack;
+using SorryDave.JiraSync.Core.Summarization;
 using SorryDave.JiraSync.Core.Sync;
 using SorryDave.JiraSync.Core.WriteBack;
 
@@ -28,6 +29,7 @@ public static class ServiceCollectionExtensions
         services.Configure<WebhookOptions>(configuration.GetSection(WebhookOptions.SectionName));
         services.Configure<SyncOptions>(configuration.GetSection(SyncOptions.SectionName));
         services.Configure<SlackOptions>(configuration.GetSection(SlackOptions.SectionName));
+        services.Configure<AnthropicOptions>(configuration.GetSection(AnthropicOptions.SectionName));
 
         services.TryAddSingletonTimeProvider();
 
@@ -65,6 +67,21 @@ public static class ServiceCollectionExtensions
         services.AddScoped<WebhookProcessor>();
         services.AddScoped<ReconciliationRunner>();
         services.AddScoped<WriteBackSender>();
+
+        // Conversation summarization (/post). The Claude extractor is used when an Anthropic key is
+        // configured; otherwise a deterministic fake keeps the pipeline runnable without Claude.
+        var anthropic = configuration.GetSection(AnthropicOptions.SectionName).Get<AnthropicOptions>() ?? new AnthropicOptions();
+        services.AddSingleton(new Redactor(anthropic.RedactionPatterns));
+        if (anthropic.IsConfigured)
+            services.AddHttpClient<IDecisionExtractor, AnthropicDecisionExtractor>(client =>
+            {
+                client.BaseAddress = new Uri("https://api.anthropic.com/");
+                client.DefaultRequestHeaders.Add("x-api-key", anthropic.ApiKey);
+                client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
+            });
+        else
+            services.AddScoped<IDecisionExtractor, FakeDecisionExtractor>();
+        services.AddScoped<IConversationSummarizer, ConversationSummarizer>();
 
         services.AddHostedService<ReconciliationBackgroundService>();
         services.AddHostedService<WriteBackBackgroundService>();
