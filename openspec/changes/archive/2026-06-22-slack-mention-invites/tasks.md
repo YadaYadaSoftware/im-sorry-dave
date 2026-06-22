@@ -32,5 +32,5 @@
 
 ## 6. Deploy & verify
 
-- [ ] 6.1 Deploy; add a comment mentioning Chris on an item with a channel → confirm Chris is invited
+- [x] 6.1 Deploy; add a comment mentioning Chris on an item with a channel → confirm Chris is invited
 - [x] 6.2 Docs: note comment/ongoing mention invites in the README Slack section
