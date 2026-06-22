@@ -16,15 +16,18 @@ public class WebhookProcessor
     private readonly IWorkItemSyncService _sync;
     private readonly ILogger<WebhookProcessor> _logger;
     private readonly IReadOnlyList<IWorkItemChangeListener> _listeners;
+    private readonly IJiraClient? _jira;
 
     public WebhookProcessor(
         IWorkItemSyncService sync,
         ILogger<WebhookProcessor> logger,
-        IEnumerable<IWorkItemChangeListener>? listeners = null)
+        IEnumerable<IWorkItemChangeListener>? listeners = null,
+        IJiraClient? jira = null)
     {
         _sync = sync;
         _logger = logger;
         _listeners = listeners?.ToList() ?? (IReadOnlyList<IWorkItemChangeListener>)Array.Empty<IWorkItemChangeListener>();
+        _jira = jira;
     }
 
     public async Task<WebhookResult> ProcessAsync(JsonElement root, CancellationToken ct = default)
@@ -46,21 +49,21 @@ public class WebhookProcessor
                 var data = JiraIssueParser.Parse(issueElement);
                 var outcome = await _sync.ApplyIssueAsync(data, ct);
 
-                // Comment events: invite anyone @mentioned in the comment body (the comment is only
-                // in the webhook root, not the issue). Best-effort, via the change-listener seam.
+                // Comment events: invite anyone @mentioned in the comment. The webhook body may be
+                // rendered text (no accountIds), so prefer the ADF in the payload, then fall back to
+                // fetching the comment via REST (guaranteed ADF). Best-effort, via the listener seam.
                 if (evt is "comment_created" or "comment_updated" &&
                     root.TryGetProperty("comment", out var comment) &&
-                    comment.ValueKind == JsonValueKind.Object &&
-                    comment.TryGetProperty("body", out var body))
+                    comment.ValueKind == JsonValueKind.Object)
                 {
-                    var mentions = AdfText.CollectMentionAccountIds(body);
+                    var mentions = await ResolveCommentMentionsAsync(data.Key, comment, ct);
                     if (mentions.Count > 0)
                         await NotifyAsync(new WorkItemChange
                         {
                             Key = data.Key,
                             Status = data.Status,
                             PreviousStatus = data.Status, // no status transition for a comment
-                            MentionedAccountIds = mentions,
+                            MentionedAccountIds = mentions.ToList(),
                         }, ct);
                 }
 
@@ -80,6 +83,35 @@ public class WebhookProcessor
                 _logger.LogDebug("Ignoring unhandled webhook event '{Event}'.", evt);
                 return new WebhookResult(evt, null, null, "ignored");
         }
+    }
+
+    /// <summary>Extract mention accountIds from the comment: prefer ADF in the webhook payload, then
+    /// fall back to fetching the comment via REST (the webhook often renders the body as plain text,
+    /// which carries the @name but not the accountId we need to resolve).</summary>
+    private async Task<IReadOnlyList<string>> ResolveCommentMentionsAsync(string issueKey, JsonElement comment, CancellationToken ct)
+    {
+        var hasBody = comment.TryGetProperty("body", out var body);
+        var bodyKind = hasBody ? body.ValueKind.ToString() : "(none)";
+
+        if (hasBody && body.ValueKind == JsonValueKind.Object)
+        {
+            var fromPayload = AdfText.CollectMentionAccountIds(body);
+            if (fromPayload.Count > 0) return fromPayload;
+        }
+
+        // No accountIds in the payload (rendered string, or none) — fetch the ADF comment by id.
+        if (_jira is not null &&
+            comment.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.String)
+        {
+            var fetched = await _jira.GetCommentMentionsAsync(issueKey, idEl.GetString()!, ct);
+            _logger.LogInformation(
+                "Comment on {Key}: webhook body kind={BodyKind}, mentions via fetch={Count}.",
+                issueKey, bodyKind, fetched.Count);
+            return fetched;
+        }
+
+        _logger.LogInformation("Comment on {Key}: webhook body kind={BodyKind}, no fetch available.", issueKey, bodyKind);
+        return Array.Empty<string>();
     }
 
     /// <summary>Best-effort fan-out to change listeners — failures logged, never rethrown.</summary>

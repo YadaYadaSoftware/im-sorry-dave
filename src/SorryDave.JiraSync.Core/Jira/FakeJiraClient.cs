@@ -50,6 +50,9 @@ public class FakeJiraClient : IJiraClient
         return Task.CompletedTask;
     }
 
+    public Task<IReadOnlyList<string>> GetCommentMentionsAsync(string issueKey, string commentId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+
     private void Seed()
     {
         var now = DateTimeOffset.UtcNow.AddHours(-1);

@@ -89,6 +89,23 @@ public class JiraRestClient : IJiraClient
         await EnsureSuccess(response, $"update comment {commentId} on {issueKey}");
     }
 
+    public async Task<IReadOnlyList<string>> GetCommentMentionsAsync(string issueKey, string commentId, CancellationToken ct = default)
+    {
+        using var response = await _http.GetAsync(
+            $"rest/api/3/issue/{Uri.EscapeDataString(issueKey)}/comment/{Uri.EscapeDataString(commentId)}", ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Could not fetch comment {Comment} on {Key} for mentions: {Status}.",
+                commentId, issueKey, (int)response.StatusCode);
+            return Array.Empty<string>();
+        }
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        return doc.RootElement.TryGetProperty("body", out var body) && body.ValueKind == JsonValueKind.Object
+            ? AdfText.CollectMentionAccountIds(body)
+            : Array.Empty<string>();
+    }
+
     private async Task EnsureSuccess(HttpResponseMessage response, string action)
     {
         if (response.IsSuccessStatusCode) return;

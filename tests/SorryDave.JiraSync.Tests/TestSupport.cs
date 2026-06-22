@@ -73,4 +73,7 @@ public sealed class StubJiraClient : IJiraClient
         Updated.Add((issueKey, commentId, body));
         return Task.CompletedTask;
     }
+
+    public Task<IReadOnlyList<string>> GetCommentMentionsAsync(string issueKey, string commentId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
 }

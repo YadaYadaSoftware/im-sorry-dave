@@ -77,4 +77,50 @@ public class MentionNotificationTests
         Assert.Equal("MDP-7", notified!.Key);
         Assert.Contains("acc-chris", notified.MentionedAccountIds);
     }
+
+    [Fact]
+    public async Task Comment_with_rendered_string_body_falls_back_to_fetching_adf_mentions()
+    {
+        using var db = new TestDb();
+        var listener = new CapturingListener();
+        var sync = new WorkItemSyncService(db.Context, TimeProvider.System, NullLogger<WorkItemSyncService>.Instance);
+        var jira = new StubCommentClient { Mentions = { ["c-42"] = new() { "acc-chris" } } };
+        var processor = new WebhookProcessor(sync, NullLogger<WebhookProcessor>.Instance, new[] { listener }, jira);
+
+        // Webhook delivers the comment body as a rendered STRING (no accountIds) + a comment id.
+        var payload = """
+        {
+          "webhookEvent": "comment_created",
+          "issue": { "key": "MDP-7", "fields": {
+            "project": { "key": "MDP" }, "issuetype": { "name": "Idea" },
+            "status": { "name": "To Do" }, "summary": "s", "updated": "2026-06-22T10:00:00.000+0000"
+          } },
+          "comment": { "id": "c-42", "body": "@Chris Tacke please look" }
+        }
+        """;
+
+        await processor.ProcessAsync(JsonDocument.Parse(payload).RootElement);
+
+        var notified = listener.Changes.SingleOrDefault(c => c.MentionedAccountIds.Count > 0);
+        Assert.NotNull(notified);
+        Assert.Contains("acc-chris", notified!.MentionedAccountIds);
+        Assert.Equal("MDP-7", jira.LastIssueKey);
+    }
+
+    private sealed class StubCommentClient : IJiraClient
+    {
+        public Dictionary<string, List<string>> Mentions { get; } = new();
+        public string? LastIssueKey { get; private set; }
+
+        public Task<IReadOnlyList<string>> GetCommentMentionsAsync(string issueKey, string commentId, CancellationToken ct = default)
+        {
+            LastIssueKey = issueKey;
+            return Task.FromResult<IReadOnlyList<string>>(Mentions.TryGetValue(commentId, out var m) ? m : new());
+        }
+
+        public Task<JiraIssueData?> GetIssueAsync(string key, CancellationToken ct = default) => Task.FromResult<JiraIssueData?>(null);
+        public Task<IReadOnlyList<JiraIssueData>> SearchAsync(string jql, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<JiraIssueData>>(Array.Empty<JiraIssueData>());
+        public Task<string> AddCommentAsync(string issueKey, string body, CancellationToken ct = default) => Task.FromResult("c1");
+        public Task UpdateCommentAsync(string issueKey, string commentId, string body, CancellationToken ct = default) => Task.CompletedTask;
+    }
 }
