@@ -33,6 +33,9 @@ public class SlackOptions
     /// <summary>Master switch for auto-inviting on provision and assignee change.</summary>
     public bool AutoInvite { get; set; } = true;
 
+    /// <summary>How often the background sweep reconciles channel links against Slack (drift detection).</summary>
+    public TimeSpan ReconciliationInterval { get; set; } = TimeSpan.FromMinutes(30);
+
     public bool IsConfigured => !string.IsNullOrWhiteSpace(BotToken);
 
     public bool IsEligible(string issueType)

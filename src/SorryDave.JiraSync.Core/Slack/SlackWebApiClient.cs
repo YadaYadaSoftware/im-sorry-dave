@@ -54,6 +54,19 @@ public sealed class SlackWebApiClient : ISlackClient
         return null;
     }
 
+    public async Task<SlackChannel?> GetChannelInfoAsync(string channelId, CancellationToken ct = default)
+    {
+        try
+        {
+            var json = await PostAsync("conversations.info", new { channel = channelId }, ct);
+            return ReadChannel(json.GetProperty("channel"));
+        }
+        catch (SlackApiException ex) when (ex.Error is "channel_not_found")
+        {
+            return null;
+        }
+    }
+
     public async Task<string> PostMessageAsync(string channelId, string text, CancellationToken ct = default)
     {
         var json = await PostAsync("chat.postMessage", new { channel = channelId, text }, ct);

@@ -32,7 +32,7 @@
 
 ## 6. Reconciliation & validation
 
-- [ ] 6.1 Periodically reconcile channel links against Slack channel state to detect drift
+- [x] 6.1 Periodically reconcile channel links against Slack channel state to detect drift
 - [x] 6.2 Unit tests for deterministic naming, collision suffix, and link uniqueness
 - [x] 6.3 Integration test: work item created → channel provisioned → status change reflected → close archives channel
 

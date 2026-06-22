@@ -56,6 +56,8 @@ public static class ServiceCollectionExtensions
         // Jira→Slack identity resolvers (tried in order). Config-map ships now; Data-Center-email and
         // Atlassian-admin-API resolvers drop into this chain later.
         services.AddScoped<IJiraSlackIdentityResolver, ConfigMapIdentityResolver>();
+        // Periodic drift reconciliation (no-op when Slack is unconfigured).
+        services.AddHostedService<SlackReconciliationBackgroundService>();
 
         services.AddScoped<IWorkItemSyncService, WorkItemSyncService>();
         services.AddScoped<IMappingStore, MappingStore>();

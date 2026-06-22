@@ -113,6 +113,48 @@ public sealed class SlackChannelService : ISlackChannelService
         return new("Unarchived", mapping.ResourceId, mapping.DisplayName);
     }
 
+    public async Task<int> ReconcileLinksAsync(CancellationToken ct = default)
+    {
+        if (!_options.IsConfigured) return 0;
+
+        var mappings = await _db.ResourceMappings
+            .Where(m => m.ResourceType == ResourceType.SlackChannel)
+            .ToListAsync(ct);
+
+        var drift = 0;
+        foreach (var mapping in mappings)
+        {
+            var info = await _slack.GetChannelInfoAsync(mapping.ResourceId, ct);
+            if (info is null)
+            {
+                _logger.LogWarning("Slack channel {Id} linked to {Key} no longer exists (dangling link).",
+                    mapping.ResourceId, mapping.WorkItemKey);
+                drift++;
+                continue;
+            }
+
+            var item = await _db.WorkItems.FirstOrDefaultAsync(w => w.Key == mapping.WorkItemKey, ct);
+            if (item is null) continue;
+
+            var shouldBeArchived = item.IsDeleted || _options.IsClosed(item.Status);
+            if (shouldBeArchived && !info.IsArchived)
+            {
+                _logger.LogInformation("Reconcile: archiving {Channel} for closed {Key}.", info.Name, item.Key);
+                await TryAsync(() => _slack.ArchiveAsync(mapping.ResourceId, ct), item.Key, "reconcile-archive");
+                drift++;
+            }
+            else if (!shouldBeArchived && info.IsArchived)
+            {
+                _logger.LogInformation("Reconcile: unarchiving {Channel} for open {Key}.", info.Name, item.Key);
+                await TryAsync(() => _slack.UnarchiveAsync(mapping.ResourceId, ct), item.Key, "reconcile-unarchive");
+                drift++;
+            }
+        }
+
+        if (drift > 0) _logger.LogInformation("Slack reconcile: {Drift} drift item(s) found/addressed.", drift);
+        return drift;
+    }
+
     /// <summary>Event-driven lifecycle + context reflection. Best-effort (the sync path swallows throws).</summary>
     public async Task OnWorkItemChangedAsync(WorkItemChange change, CancellationToken ct = default)
     {

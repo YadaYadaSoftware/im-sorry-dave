@@ -23,4 +23,8 @@ public interface ISlackChannelService : IWorkItemChangeListener
 
     /// <summary>Unarchive the work item's linked channel (posts a re-activation note).</summary>
     Task<ChannelProvisionResult> UnarchiveAsync(string workItemKey, bool dryRun = false, CancellationToken ct = default);
+
+    /// <summary>Reconcile channel links against Slack: flag dangling links (channel deleted) and
+    /// re-align archived state with the work item's open/closed status. Returns the drift count.</summary>
+    Task<int> ReconcileLinksAsync(CancellationToken ct = default);
 }

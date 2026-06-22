@@ -24,6 +24,9 @@ public static class SlackEndpoints
         group.MapPost("/{key}/unarchive", async (string key, bool? dryRun, ISlackChannelService svc, CancellationToken ct)
             => Results.Ok(await svc.UnarchiveAsync(key, dryRun ?? false, ct)));
 
+        group.MapPost("/reconcile", async (ISlackChannelService svc, CancellationToken ct)
+            => Results.Ok(new { drift = await svc.ReconcileLinksAsync(ct) }));
+
         group.MapGet("/{key}/channel", async (string key, IMappingStore mappings, CancellationToken ct) =>
         {
             var mapping = (await mappings.GetMappingsForWorkItemAsync(key, ct))

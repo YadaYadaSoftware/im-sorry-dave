@@ -15,6 +15,9 @@ public interface ISlackClient
     /// <summary>Find a channel by exact name (including archived), or null.</summary>
     Task<SlackChannel?> FindChannelByNameAsync(string name, CancellationToken ct = default);
 
+    /// <summary>Get a channel by id (for drift reconciliation), or null if it no longer exists.</summary>
+    Task<SlackChannel?> GetChannelInfoAsync(string channelId, CancellationToken ct = default);
+
     /// <summary>Post a message; returns the message timestamp (ts) for pinning.</summary>
     Task<string> PostMessageAsync(string channelId, string text, CancellationToken ct = default);
 
