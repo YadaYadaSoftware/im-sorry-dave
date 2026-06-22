@@ -50,8 +50,8 @@ public class FakeJiraClient : IJiraClient
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<string>> GetCommentMentionsAsync(string issueKey, string commentId, CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+    public Task<CommentContent> GetCommentAsync(string issueKey, string commentId, CancellationToken ct = default)
+        => Task.FromResult(new CommentContent(Array.Empty<string>(), null));
 
     private void Seed()
     {

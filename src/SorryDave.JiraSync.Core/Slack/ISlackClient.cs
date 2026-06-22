@@ -30,6 +30,7 @@ public interface ISlackClient
     /// <summary>Resolve a Slack user id by email, or null if no match (best-effort identity mapping).</summary>
     Task<string?> LookupUserIdByEmailAsync(string email, CancellationToken ct = default);
 
-    /// <summary>Invite a user to a channel. No-op-safe if already a member.</summary>
-    Task InviteAsync(string channelId, string userId, CancellationToken ct = default);
+    /// <summary>Invite a user to a channel. No-op-safe if already a member. Returns true if the user
+    /// was newly added, false if they were already in the channel.</summary>
+    Task<bool> InviteAsync(string channelId, string userId, CancellationToken ct = default);
 }

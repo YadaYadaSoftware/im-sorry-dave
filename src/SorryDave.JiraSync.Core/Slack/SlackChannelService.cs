@@ -198,10 +198,20 @@ public sealed class SlackChannelService : ISlackChannelService
                 new[] { new JiraUserRef(change.AssigneeAccountId, change.AssigneeDisplayName, null) }, ct);
         }
 
-        // Invite anyone newly @mentioned (in a description edit or a comment) — idempotent.
+        // Invite anyone newly @mentioned (in a description edit or a comment) and welcome the ones
+        // actually added with the text of the mention (their welcome message into this channel).
         if (change.MentionedAccountIds.Count > 0)
-            await InviteParticipantsAsync(channelId, change.Key,
+        {
+            var added = await InviteParticipantsAsync(channelId, change.Key,
                 change.MentionedAccountIds.Select(id => new JiraUserRef(id, null, null)), ct);
+            if (added.Count > 0 && !string.IsNullOrWhiteSpace(change.MentionContext))
+            {
+                var who = string.Join(" ", added.Select(u => $"<@{u}>"));
+                await TryAsync(() => _slack.PostMessageAsync(channelId,
+                    $"{who} you were mentioned on *{change.Key}*:\n> {Truncate(change.MentionContext!.Trim(), 1000)}", ct),
+                    change.Key, "mention welcome");
+            }
+        }
     }
 
     private async Task SeedContextAsync(string channelId, WorkItem item, CancellationToken ct)
@@ -230,22 +240,34 @@ public sealed class SlackChannelService : ISlackChannelService
         await InviteParticipantsAsync(channelId, item.Key, participants, ct);
     }
 
-    /// <summary>Resolve and invite specific Jira participants (not the fixed watcher list). All
-    /// best-effort and idempotent; unresolved identities are skipped (not an error).</summary>
-    private async Task InviteParticipantsAsync(string channelId, string key, IEnumerable<JiraUserRef> participants, CancellationToken ct)
+    /// <summary>Resolve and invite specific Jira participants (not the fixed watcher list). Returns
+    /// the Slack ids that were newly added (not already members). Best-effort and idempotent;
+    /// unresolved identities are skipped (not an error).</summary>
+    private async Task<List<string>> InviteParticipantsAsync(string channelId, string key, IEnumerable<JiraUserRef> participants, CancellationToken ct)
     {
-        if (!_options.AutoInvite) return;
+        var newlyAdded = new List<string>();
+        if (!_options.AutoInvite) return newlyAdded;
 
         foreach (var participant in participants)
         {
             if (participant.IsEmpty) continue;
             var slackId = await ResolveAsync(participant, ct);
-            if (slackId is not null)
-                await TryAsync(() => _slack.InviteAsync(channelId, slackId, ct), key, "invite (participant)");
-            else
+            if (slackId is null)
+            {
                 _logger.LogDebug("No Slack identity for Jira user {User} on {Key}; skipping invite.",
                     participant.DisplayName ?? participant.AccountId ?? "(unknown)", key);
+                continue;
+            }
+            try
+            {
+                if (await _slack.InviteAsync(channelId, slackId, ct)) newlyAdded.Add(slackId);
+            }
+            catch (SlackApiException ex)
+            {
+                _logger.LogWarning("Slack invite failed for {Key}: {Error}", key, ex.Error);
+            }
         }
+        return newlyAdded;
     }
 
     /// <summary>Try each registered resolver in order; first non-null wins.</summary>

@@ -110,12 +110,15 @@ public class MentionNotificationTests
     private sealed class StubCommentClient : IJiraClient
     {
         public Dictionary<string, List<string>> Mentions { get; } = new();
+        public Dictionary<string, string> Text { get; } = new();
         public string? LastIssueKey { get; private set; }
 
-        public Task<IReadOnlyList<string>> GetCommentMentionsAsync(string issueKey, string commentId, CancellationToken ct = default)
+        public Task<CommentContent> GetCommentAsync(string issueKey, string commentId, CancellationToken ct = default)
         {
             LastIssueKey = issueKey;
-            return Task.FromResult<IReadOnlyList<string>>(Mentions.TryGetValue(commentId, out var m) ? m : new());
+            var ids = Mentions.TryGetValue(commentId, out var m) ? m : new();
+            var text = Text.TryGetValue(commentId, out var t) ? t : null;
+            return Task.FromResult(new CommentContent(ids, text));
         }
 
         public Task<JiraIssueData?> GetIssueAsync(string key, CancellationToken ct = default) => Task.FromResult<JiraIssueData?>(null);

@@ -307,6 +307,66 @@ public class SlackChannelServiceTests
     }
 
     [Fact]
+    public async Task Mention_invite_posts_a_welcome_with_the_mention_text()
+    {
+        using var db = new TestDb();
+        Seed(db);
+        var slack = new FakeSlackClient();
+        var options = new SlackOptions { BotToken = "xoxb-test", UserMap = { ["acc-chris"] = "U-chris" } };
+        var svc = Service(db, slack, options);
+        var prov = await svc.ProvisionAsync("MDP-7");
+
+        await svc.OnWorkItemChangedAsync(new WorkItemChange
+        {
+            Key = "MDP-7",
+            Status = "To Do",
+            PreviousStatus = "To Do",
+            MentionedAccountIds = { "acc-chris" },
+            MentionContext = "hey @Chris can you weigh in",
+        });
+
+        Assert.Contains(slack.Messages, m =>
+            m.Channel == prov.ChannelId && m.Text.Contains("<@U-chris>") && m.Text.Contains("hey @Chris can you weigh in"));
+    }
+
+    [Fact]
+    public async Task Already_member_mention_does_not_repost_welcome()
+    {
+        using var db = new TestDb();
+        Seed(db);
+        var slack = new FakeSlackClient();
+        var options = new SlackOptions { BotToken = "xoxb-test", UserMap = { ["acc-chris"] = "U-chris" } };
+        var svc = Service(db, slack, options);
+        var prov = await svc.ProvisionAsync("MDP-7");
+        var change = new WorkItemChange
+        {
+            Key = "MDP-7", Status = "To Do", PreviousStatus = "To Do",
+            MentionedAccountIds = { "acc-chris" }, MentionContext = "first mention",
+        };
+        await svc.OnWorkItemChangedAsync(change); // Chris added + welcomed
+
+        var before = slack.Messages.Count(m => m.Text.Contains("first mention"));
+        await svc.OnWorkItemChangedAsync(change with { MentionContext = "second mention" }); // already a member
+
+        Assert.Equal(1, before);
+        Assert.DoesNotContain(slack.Messages, m => m.Text.Contains("second mention")); // no re-welcome
+    }
+
+    [Fact]
+    public async Task Auto_provision_does_not_post_a_separate_mention_welcome()
+    {
+        using var db = new TestDb();
+        Seed(db, description: "see @Chris", mentionedAccountIds: new() { "acc-chris" });
+        var slack = new FakeSlackClient();
+        var options = new SlackOptions { BotToken = "xoxb-test", UserMap = { ["acc-chris"] = "U-chris" } };
+
+        await Service(db, slack, options).ProvisionAsync("MDP-7");
+
+        // The description is the welcome; no extra "you were mentioned" message at provision.
+        Assert.DoesNotContain(slack.Messages, m => m.Text.Contains("you were mentioned"));
+    }
+
+    [Fact]
     public async Task Mention_change_on_item_without_channel_is_a_noop()
     {
         using var db = new TestDb();
@@ -432,6 +492,11 @@ public class SlackChannelServiceTests
             return Task.CompletedTask;
         }
         public Task<string?> LookupUserIdByEmailAsync(string email, CancellationToken ct = default) => Task.FromResult<string?>(null);
-        public Task InviteAsync(string channelId, string userId, CancellationToken ct = default) { Invited.Add((channelId, userId)); return Task.CompletedTask; }
+        public Task<bool> InviteAsync(string channelId, string userId, CancellationToken ct = default)
+        {
+            var fresh = !Invited.Any(i => i.Channel == channelId && i.User == userId);
+            Invited.Add((channelId, userId));
+            return Task.FromResult(fresh);
+        }
     }
 }

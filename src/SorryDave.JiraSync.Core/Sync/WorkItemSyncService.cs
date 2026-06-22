@@ -112,6 +112,7 @@ public class WorkItemSyncService : IWorkItemSyncService
             AssigneeDisplayName = issue.AssigneeDisplayName,
             PreviousAssigneeAccountId = previousAssignee,
             MentionedAccountIds = newMentions,
+            MentionContext = newMentions.Count > 0 ? issue.Description : null,
         };
         if (change.StatusChanged || change.AssigneeChanged || newMentions.Count > 0)
             await NotifyAsync(change, ct);

@@ -1,5 +1,8 @@
 namespace SorryDave.JiraSync.Core.Jira;
 
+/// <summary>A comment's @mention accountIds and its readable text (flattened from ADF).</summary>
+public sealed record CommentContent(IReadOnlyList<string> MentionAccountIds, string? Text);
+
 /// <summary>Abstraction over the Jira REST API. Implemented by the real client and an
 /// in-memory fake used for local review and tests.</summary>
 public interface IJiraClient
@@ -16,7 +19,7 @@ public interface IJiraClient
     /// <summary>Edit an existing comment in place.</summary>
     Task UpdateCommentAsync(string issueKey, string commentId, string body, CancellationToken ct = default);
 
-    /// <summary>AccountIds @mentioned in a comment's ADF body (empty if none / not found). Used to
-    /// invite mentioned users, since webhook payloads may render the body without accountIds.</summary>
-    Task<IReadOnlyList<string>> GetCommentMentionsAsync(string issueKey, string commentId, CancellationToken ct = default);
+    /// <summary>A comment's @mention accountIds and text from its ADF body (used to invite and welcome
+    /// mentioned users, since webhook payloads may render the body without accountIds).</summary>
+    Task<CommentContent> GetCommentAsync(string issueKey, string commentId, CancellationToken ct = default);
 }

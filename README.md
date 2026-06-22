@@ -197,7 +197,8 @@ Each tracked work item gets its own Slack channel, mirroring the item's lifecycl
   `Slack:UserMap`; unresolved are skipped). Mention invites fire **whenever the mention occurs** — at
   creation and afterward (comments, description edits) — for items that have a channel. On Jira Cloud,
   user emails are private, so identities map via `UserMap` (Jira accountId or displayName → Slack id)
-  rather than by email.
+  rather than by email. When a mention adds someone to a channel, they get a **welcome message** with
+  the text of the comment/description where they were mentioned, so they have context on arrival.
 - **Lifecycle.** Status → closed archives the channel (with a closing note); reopen unarchives;
   status/assignee changes update the topic and post a note. A periodic sweep reconciles links against
   Slack (dangling links, archived-state drift); `POST /slack/reconcile` runs it on demand.

@@ -56,7 +56,7 @@ public class WebhookProcessor
                     root.TryGetProperty("comment", out var comment) &&
                     comment.ValueKind == JsonValueKind.Object)
                 {
-                    var mentions = await ResolveCommentMentionsAsync(data.Key, comment, ct);
+                    var (mentions, text) = await ResolveCommentMentionsAsync(data.Key, comment, ct);
                     if (mentions.Count > 0)
                         await NotifyAsync(new WorkItemChange
                         {
@@ -64,6 +64,7 @@ public class WebhookProcessor
                             Status = data.Status,
                             PreviousStatus = data.Status, // no status transition for a comment
                             MentionedAccountIds = mentions.ToList(),
+                            MentionContext = text,
                         }, ct);
                 }
 
@@ -85,10 +86,10 @@ public class WebhookProcessor
         }
     }
 
-    /// <summary>Extract mention accountIds from the comment: prefer ADF in the webhook payload, then
-    /// fall back to fetching the comment via REST (the webhook often renders the body as plain text,
-    /// which carries the @name but not the accountId we need to resolve).</summary>
-    private async Task<IReadOnlyList<string>> ResolveCommentMentionsAsync(string issueKey, JsonElement comment, CancellationToken ct)
+    /// <summary>Extract mention accountIds and the readable text from the comment: prefer ADF in the
+    /// webhook payload, then fall back to fetching the comment via REST (the webhook often renders the
+    /// body as plain text, which carries the @name but not the accountId we need to resolve).</summary>
+    private async Task<(IReadOnlyList<string> Mentions, string? Text)> ResolveCommentMentionsAsync(string issueKey, JsonElement comment, CancellationToken ct)
     {
         var hasBody = comment.TryGetProperty("body", out var body);
         var bodyKind = hasBody ? body.ValueKind.ToString() : "(none)";
@@ -96,22 +97,24 @@ public class WebhookProcessor
         if (hasBody && body.ValueKind == JsonValueKind.Object)
         {
             var fromPayload = AdfText.CollectMentionAccountIds(body);
-            if (fromPayload.Count > 0) return fromPayload;
+            if (fromPayload.Count > 0) return (fromPayload, AdfText.Flatten(body));
         }
 
         // No accountIds in the payload (rendered string, or none) — fetch the ADF comment by id.
         if (_jira is not null &&
             comment.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.String)
         {
-            var fetched = await _jira.GetCommentMentionsAsync(issueKey, idEl.GetString()!, ct);
+            var fetched = await _jira.GetCommentAsync(issueKey, idEl.GetString()!, ct);
             _logger.LogInformation(
                 "Comment on {Key}: webhook body kind={BodyKind}, mentions via fetch={Count}.",
-                issueKey, bodyKind, fetched.Count);
-            return fetched;
+                issueKey, bodyKind, fetched.MentionAccountIds.Count);
+            return (fetched.MentionAccountIds, fetched.Text);
         }
 
+        // Plain-string webhook body: use it as the welcome text even though we found no accountIds.
+        var fallbackText = hasBody && body.ValueKind == JsonValueKind.String ? body.GetString() : null;
         _logger.LogInformation("Comment on {Key}: webhook body kind={BodyKind}, no fetch available.", issueKey, bodyKind);
-        return Array.Empty<string>();
+        return (Array.Empty<string>(), fallbackText);
     }
 
     /// <summary>Best-effort fan-out to change listeners — failures logged, never rethrown.</summary>

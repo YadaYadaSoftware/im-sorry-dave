@@ -20,6 +20,9 @@ public sealed record WorkItemChange
     /// <summary>AccountIds @mentioned (in the description or a triggering comment) to invite to the channel.</summary>
     public List<string> MentionedAccountIds { get; init; } = new();
 
+    /// <summary>The text where the mention occurred (comment or description), used to welcome invitees.</summary>
+    public string? MentionContext { get; init; }
+
     public bool StatusChanged => !string.Equals(Status, PreviousStatus, StringComparison.Ordinal);
     public bool AssigneeChanged => !string.Equals(AssigneeAccountId, PreviousAssigneeAccountId, StringComparison.Ordinal);
 }

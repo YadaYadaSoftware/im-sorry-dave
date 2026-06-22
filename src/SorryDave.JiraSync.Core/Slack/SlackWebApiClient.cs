@@ -101,15 +101,16 @@ public sealed class SlackWebApiClient : ISlackClient
         }
     }
 
-    public async Task InviteAsync(string channelId, string userId, CancellationToken ct = default)
+    public async Task<bool> InviteAsync(string channelId, string userId, CancellationToken ct = default)
     {
         try
         {
             await PostAsync("conversations.invite", new { channel = channelId, users = userId }, ct);
+            return true; // newly added
         }
         catch (SlackApiException ex) when (ex.Error is "already_in_channel" or "cant_invite_self")
         {
-            // benign — treat as success
+            return false; // already a member (benign)
         }
     }
 
