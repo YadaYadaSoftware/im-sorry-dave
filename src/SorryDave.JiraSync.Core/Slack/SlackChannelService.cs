@@ -197,6 +197,11 @@ public sealed class SlackChannelService : ISlackChannelService
             await InviteParticipantsAsync(channelId, change.Key,
                 new[] { new JiraUserRef(change.AssigneeAccountId, change.AssigneeDisplayName, null) }, ct);
         }
+
+        // Invite anyone newly @mentioned (in a description edit or a comment) — idempotent.
+        if (change.MentionedAccountIds.Count > 0)
+            await InviteParticipantsAsync(channelId, change.Key,
+                change.MentionedAccountIds.Select(id => new JiraUserRef(id, null, null)), ct);
     }
 
     private async Task SeedContextAsync(string channelId, WorkItem item, CancellationToken ct)
@@ -210,7 +215,12 @@ public sealed class SlackChannelService : ISlackChannelService
         if (!string.IsNullOrWhiteSpace(item.Description))
             await TryAsync(() => _slack.PostMessageAsync(channelId, Truncate(item.Description!, 3000), ct), item.Key, "description");
 
-        // Invite the assignee, the creator (reporter), and everyone @mentioned in the description.
+        // Provision time: invite the fixed watcher list once, plus the assignee, the creator
+        // (reporter), and everyone @mentioned in the description.
+        if (_options.AutoInvite)
+            foreach (var userId in _options.InviteUserIds)
+                await TryAsync(() => _slack.InviteAsync(channelId, userId, ct), item.Key, "invite (fixed)");
+
         var participants = new List<JiraUserRef>
         {
             new(item.AssigneeAccountId, item.AssigneeDisplayName, null),
@@ -220,14 +230,11 @@ public sealed class SlackChannelService : ISlackChannelService
         await InviteParticipantsAsync(channelId, item.Key, participants, ct);
     }
 
-    /// <summary>Invite the fixed watcher list plus any resolvable Jira participants. All best-effort
-    /// and idempotent; unresolved identities are skipped (not an error).</summary>
+    /// <summary>Resolve and invite specific Jira participants (not the fixed watcher list). All
+    /// best-effort and idempotent; unresolved identities are skipped (not an error).</summary>
     private async Task InviteParticipantsAsync(string channelId, string key, IEnumerable<JiraUserRef> participants, CancellationToken ct)
     {
         if (!_options.AutoInvite) return;
-
-        foreach (var userId in _options.InviteUserIds)
-            await TryAsync(() => _slack.InviteAsync(channelId, userId, ct), key, "invite (fixed)");
 
         foreach (var participant in participants)
         {

@@ -17,6 +17,9 @@ public sealed record WorkItemChange
     /// <summary>True when this notification is for a newly created work item (drives auto-provisioning).</summary>
     public bool Created { get; init; }
 
+    /// <summary>AccountIds @mentioned (in the description or a triggering comment) to invite to the channel.</summary>
+    public List<string> MentionedAccountIds { get; init; } = new();
+
     public bool StatusChanged => !string.Equals(Status, PreviousStatus, StringComparison.Ordinal);
     public bool AssigneeChanged => !string.Equals(AssigneeAccountId, PreviousAssigneeAccountId, StringComparison.Ordinal);
 }

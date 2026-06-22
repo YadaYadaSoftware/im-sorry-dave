@@ -284,6 +284,48 @@ public class SlackChannelServiceTests
         Assert.DoesNotContain("U-bob", invited); // mentioned but unmapped → skipped (no throw)
     }
 
+    [Fact]
+    public async Task Mention_change_invites_resolved_user_on_linked_channel()
+    {
+        using var db = new TestDb();
+        Seed(db);
+        var slack = new FakeSlackClient();
+        var options = new SlackOptions { BotToken = "xoxb-test", UserMap = { ["acc-chris"] = "U-chris" } };
+        var svc = Service(db, slack, options);
+        var prov = await svc.ProvisionAsync("MDP-7");
+
+        // A comment/description-edit notification carrying a new mention (no status/assignee change).
+        await svc.OnWorkItemChangedAsync(new WorkItemChange
+        {
+            Key = "MDP-7",
+            Status = "To Do",
+            PreviousStatus = "To Do",
+            MentionedAccountIds = { "acc-chris" },
+        });
+
+        Assert.Contains((prov.ChannelId!, "U-chris"), slack.Invited);
+    }
+
+    [Fact]
+    public async Task Mention_change_on_item_without_channel_is_a_noop()
+    {
+        using var db = new TestDb();
+        Seed(db);
+        var slack = new FakeSlackClient();
+        var options = new SlackOptions { BotToken = "xoxb-test", UserMap = { ["acc-chris"] = "U-chris" } };
+
+        // No channel provisioned for MDP-7.
+        await Service(db, slack, options).OnWorkItemChangedAsync(new WorkItemChange
+        {
+            Key = "MDP-7",
+            Status = "To Do",
+            PreviousStatus = "To Do",
+            MentionedAccountIds = { "acc-chris" },
+        });
+
+        Assert.Empty(slack.Invited);
+    }
+
     private static WorkItem Seed(TestDb db, string key = "MDP-7", string type = "Idea",
         string status = "To Do", string summary = "Build Slack Channel",
         string? assigneeAccountId = null, string? assigneeDisplayName = null, string? reporterDisplayName = null,

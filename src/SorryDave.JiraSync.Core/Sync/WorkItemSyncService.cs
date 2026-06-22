@@ -81,6 +81,7 @@ public class WorkItemSyncService : IWorkItemSyncService
 
         var previousStatus = existing.Status;
         var previousAssignee = existing.AssigneeAccountId;
+        var previousMentions = existing.MentionedAccountIds;
 
         existing.ProjectKey = issue.ProjectKey;
         existing.IssueType = issue.IssueType;
@@ -99,6 +100,9 @@ public class WorkItemSyncService : IWorkItemSyncService
 
         await _db.SaveChangesAsync(ct);
 
+        // Newly-added description mentions (vs. what we had) become invite targets.
+        var newMentions = issue.MentionedAccountIds.Where(m => !previousMentions.Contains(m)).ToList();
+
         var change = new WorkItemChange
         {
             Key = issue.Key,
@@ -107,8 +111,9 @@ public class WorkItemSyncService : IWorkItemSyncService
             AssigneeAccountId = issue.AssigneeAccountId,
             AssigneeDisplayName = issue.AssigneeDisplayName,
             PreviousAssigneeAccountId = previousAssignee,
+            MentionedAccountIds = newMentions,
         };
-        if (change.StatusChanged || change.AssigneeChanged)
+        if (change.StatusChanged || change.AssigneeChanged || newMentions.Count > 0)
             await NotifyAsync(change, ct);
 
         return SyncOutcome.Updated;
