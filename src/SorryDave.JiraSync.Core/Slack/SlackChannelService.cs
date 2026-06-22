@@ -23,6 +23,7 @@ public sealed class SlackChannelService : ISlackChannelService
     private readonly SlackOptions _options;
     private readonly JiraOptions _jira;
     private readonly ILogger<SlackChannelService> _logger;
+    private readonly IReadOnlyList<IJiraSlackIdentityResolver> _resolvers;
 
     public SlackChannelService(
         ISlackClient slack,
@@ -30,7 +31,8 @@ public sealed class SlackChannelService : ISlackChannelService
         JiraSyncDbContext db,
         IOptions<SlackOptions> options,
         IOptions<JiraOptions> jira,
-        ILogger<SlackChannelService> logger)
+        ILogger<SlackChannelService> logger,
+        IEnumerable<IJiraSlackIdentityResolver>? resolvers = null)
     {
         _slack = slack;
         _mappings = mappings;
@@ -38,6 +40,7 @@ public sealed class SlackChannelService : ISlackChannelService
         _options = options.Value;
         _jira = jira.Value;
         _logger = logger;
+        _resolvers = resolvers?.ToList() ?? (IReadOnlyList<IJiraSlackIdentityResolver>)Array.Empty<IJiraSlackIdentityResolver>();
     }
 
     public async Task<ChannelProvisionResult> ProvisionAsync(string workItemKey, bool dryRun = false, CancellationToken ct = default)
@@ -139,7 +142,11 @@ public sealed class SlackChannelService : ISlackChannelService
         if (change.StatusChanged)
             await TryAsync(() => _slack.PostMessageAsync(channelId, $"Status → *{change.Status}*", ct), change.Key, "status note");
         if (change.AssigneeChanged)
+        {
             await TryAsync(() => _slack.PostMessageAsync(channelId, $"Assignee → {change.AssigneeDisplayName ?? "_unassigned_"}", ct), change.Key, "assignee note");
+            await InviteParticipantsAsync(channelId, change.Key,
+                new JiraUserRef(change.AssigneeAccountId, change.AssigneeDisplayName, null), reporter: null, ct);
+        }
     }
 
     private async Task SeedContextAsync(string channelId, WorkItem item, CancellationToken ct)
@@ -149,6 +156,42 @@ public sealed class SlackChannelService : ISlackChannelService
 
         var ts = await _slack.PostMessageAsync(channelId, BuildContext(item, url), ct);
         await TryAsync(() => _slack.PinMessageAsync(channelId, ts, ct), item.Key, "pin");
+
+        await InviteParticipantsAsync(channelId, item.Key,
+            new JiraUserRef(item.AssigneeAccountId, item.AssigneeDisplayName, null),
+            new JiraUserRef(null, item.ReporterDisplayName, null), ct);
+    }
+
+    /// <summary>Invite the fixed watcher list plus any resolvable Jira participants. All best-effort
+    /// and idempotent; unresolved identities are skipped (not an error).</summary>
+    private async Task InviteParticipantsAsync(string channelId, string key, JiraUserRef? assignee, JiraUserRef? reporter, CancellationToken ct)
+    {
+        if (!_options.AutoInvite) return;
+
+        foreach (var userId in _options.InviteUserIds)
+            await TryAsync(() => _slack.InviteAsync(channelId, userId, ct), key, "invite (fixed)");
+
+        foreach (var participant in new[] { assignee, reporter })
+        {
+            if (participant is null || participant.IsEmpty) continue;
+            var slackId = await ResolveAsync(participant, ct);
+            if (slackId is not null)
+                await TryAsync(() => _slack.InviteAsync(channelId, slackId, ct), key, "invite (participant)");
+            else
+                _logger.LogDebug("No Slack identity for Jira user {User} on {Key}; skipping invite.",
+                    participant.DisplayName ?? participant.AccountId ?? "(unknown)", key);
+        }
+    }
+
+    /// <summary>Try each registered resolver in order; first non-null wins.</summary>
+    private async Task<string?> ResolveAsync(JiraUserRef user, CancellationToken ct)
+    {
+        foreach (var resolver in _resolvers)
+        {
+            var id = await resolver.ResolveSlackUserIdAsync(user, ct);
+            if (id is not null) return id;
+        }
+        return null;
     }
 
     private async Task<ResourceMapping?> GetChannelMappingAsync(string key, CancellationToken ct)

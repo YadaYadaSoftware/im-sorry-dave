@@ -63,7 +63,7 @@ public class SlackChannelServiceTests
         using var db = new TestDb();
         Seed(db, type: "Bug");
 
-        var result = await Service(db, new FakeSlackClient(), eligibleTypes: "Idea").ProvisionAsync("MDP-7");
+        var result = await Service(db, new FakeSlackClient(), new SlackOptions { EligibleIssueTypes = { "Idea" } }).ProvisionAsync("MDP-7");
 
         Assert.Equal("Skipped", result.Outcome);
     }
@@ -96,8 +96,66 @@ public class SlackChannelServiceTests
         Assert.Contains(prov.ChannelId, slack.Unarchived);
     }
 
+    [Fact]
+    public async Task Provision_invites_fixed_list_and_resolved_assignee_and_reporter()
+    {
+        using var db = new TestDb();
+        Seed(db, assigneeAccountId: "acc-assignee", assigneeDisplayName: "Dave", reporterDisplayName: "Frank");
+        var slack = new FakeSlackClient();
+        var options = new SlackOptions
+        {
+            BotToken = "xoxb-test",
+            InviteUserIds = { "U-watcher" },
+            UserMap = { ["acc-assignee"] = "U-dave", ["Frank"] = "U-frank" },
+        };
+
+        var result = await Service(db, slack, options).ProvisionAsync("MDP-7");
+
+        var invited = slack.Invited.Where(i => i.Channel == result.ChannelId).Select(i => i.User).ToList();
+        Assert.Contains("U-watcher", invited); // fixed list
+        Assert.Contains("U-dave", invited);    // assignee resolved by accountId
+        Assert.Contains("U-frank", invited);   // reporter resolved by displayName
+    }
+
+    [Fact]
+    public async Task Unresolved_participant_is_skipped_without_failing()
+    {
+        using var db = new TestDb();
+        Seed(db, assigneeAccountId: "acc-unknown", assigneeDisplayName: "Nobody");
+        var slack = new FakeSlackClient();
+
+        var result = await Service(db, slack, new SlackOptions { BotToken = "xoxb-test" }).ProvisionAsync("MDP-7");
+
+        Assert.Equal("Created", result.Outcome);  // provisioning still succeeds
+        Assert.Empty(slack.Invited);               // nobody mapped → nobody invited
+    }
+
+    [Fact]
+    public async Task Assignee_change_invites_the_new_assignee()
+    {
+        using var db = new TestDb();
+        Seed(db);
+        var slack = new FakeSlackClient();
+        var options = new SlackOptions { BotToken = "xoxb-test", UserMap = { ["acc-new"] = "U-new" } };
+        var svc = Service(db, slack, options);
+        var prov = await svc.ProvisionAsync("MDP-7");
+
+        await svc.OnWorkItemChangedAsync(new WorkItemChange
+        {
+            Key = "MDP-7",
+            Status = "To Do",
+            PreviousStatus = "To Do",
+            AssigneeAccountId = "acc-new",
+            AssigneeDisplayName = "Newbie",
+            PreviousAssigneeAccountId = "acc-old",
+        });
+
+        Assert.Contains((prov.ChannelId!, "U-new"), slack.Invited);
+    }
+
     private static WorkItem Seed(TestDb db, string key = "MDP-7", string type = "Idea",
-        string status = "To Do", string summary = "Build Slack Channel")
+        string status = "To Do", string summary = "Build Slack Channel",
+        string? assigneeAccountId = null, string? assigneeDisplayName = null, string? reporterDisplayName = null)
     {
         var item = new WorkItem
         {
@@ -106,6 +164,9 @@ public class SlackChannelServiceTests
             IssueType = type,
             Status = status,
             Summary = summary,
+            AssigneeAccountId = assigneeAccountId,
+            AssigneeDisplayName = assigneeDisplayName,
+            ReporterDisplayName = reporterDisplayName,
             JiraUpdated = DateTimeOffset.UtcNow,
             FirstSeenUtc = DateTimeOffset.UtcNow,
             LastSyncedUtc = DateTimeOffset.UtcNow,
@@ -115,17 +176,20 @@ public class SlackChannelServiceTests
         return item;
     }
 
-    private static SlackChannelService Service(TestDb db, FakeSlackClient slack, params string[] eligibleTypes)
+    private static SlackChannelService Service(TestDb db, FakeSlackClient slack, SlackOptions? options = null)
     {
-        var slackOptions = new SlackOptions { BotToken = "xoxb-test", EligibleIssueTypes = eligibleTypes.ToList() };
+        var slackOptions = options ?? new SlackOptions();
+        if (string.IsNullOrEmpty(slackOptions.BotToken)) slackOptions.BotToken = "xoxb-test";
         var jiraOptions = new JiraOptions { BaseUrl = "https://x.atlassian.net" };
+        var resolvers = new IJiraSlackIdentityResolver[] { new ConfigMapIdentityResolver(Options.Create(slackOptions)) };
         return new SlackChannelService(
             slack,
             new MappingStore(db.Context, TimeProvider.System),
             db.Context,
             Options.Create(slackOptions),
             Options.Create(jiraOptions),
-            NullLogger<SlackChannelService>.Instance);
+            NullLogger<SlackChannelService>.Instance,
+            resolvers);
     }
 
     private sealed class FakeSlackClient : ISlackClient
@@ -134,6 +198,7 @@ public class SlackChannelServiceTests
         public List<(string Channel, string Text)> Messages { get; } = new();
         public List<string> Archived { get; } = new();
         public List<string> Unarchived { get; } = new();
+        public List<(string Channel, string User)> Invited { get; } = new();
         public int FailCreateWithNameTaken { get; set; }
         private int _seq;
 
@@ -159,6 +224,6 @@ public class SlackChannelServiceTests
         public Task UnarchiveAsync(string channelId, CancellationToken ct = default) { Unarchived.Add(channelId); return Task.CompletedTask; }
         public Task PinMessageAsync(string channelId, string messageTs, CancellationToken ct = default) => Task.CompletedTask;
         public Task<string?> LookupUserIdByEmailAsync(string email, CancellationToken ct = default) => Task.FromResult<string?>(null);
-        public Task InviteAsync(string channelId, string userId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task InviteAsync(string channelId, string userId, CancellationToken ct = default) { Invited.Add((channelId, userId)); return Task.CompletedTask; }
     }
 }

@@ -53,6 +53,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<SlackChannelService>();
         services.AddScoped<ISlackChannelService>(sp => sp.GetRequiredService<SlackChannelService>());
         services.AddScoped<IWorkItemChangeListener>(sp => sp.GetRequiredService<SlackChannelService>());
+        // Jira→Slack identity resolvers (tried in order). Config-map ships now; Data-Center-email and
+        // Atlassian-admin-API resolvers drop into this chain later.
+        services.AddScoped<IJiraSlackIdentityResolver, ConfigMapIdentityResolver>();
 
         services.AddScoped<IWorkItemSyncService, WorkItemSyncService>();
         services.AddScoped<IMappingStore, MappingStore>();

@@ -28,7 +28,7 @@
 
 - [x] 5.1 Update channel topic/purpose on status and assignee changes
 - [x] 5.2 Pin or expose the Jira work-item link in the channel
-- [ ] 5.3 Resolve Jira→Slack identities (by email) and invite assignee/reporter, skipping unresolved
+- [x] 5.3 Resolve Jira→Slack identities (by email) and invite assignee/reporter, skipping unresolved
 
 ## 6. Reconciliation & validation
 

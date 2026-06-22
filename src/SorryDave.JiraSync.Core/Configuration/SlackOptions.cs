@@ -21,6 +21,18 @@ public class SlackOptions
     /// <summary>Statuses treated as terminal/closed — the linked channel is archived. Case-insensitive.</summary>
     public List<string> ClosedStatuses { get; set; } = new() { "Done", "Closed", "Resolved", "Archived", "Cancelled" };
 
+    /// <summary>Slack user ids invited to every provisioned channel (e.g. team watchers), so the
+    /// channel is visible to them without browsing.</summary>
+    public List<string> InviteUserIds { get; set; } = new();
+
+    /// <summary>Static Jira→Slack identity map: Jira <c>accountId</c> OR <c>displayName</c> → Slack
+    /// user id. Used by <c>ConfigMapIdentityResolver</c> to invite the assignee/reporter without any
+    /// enterprise identity API.</summary>
+    public Dictionary<string, string> UserMap { get; set; } = new();
+
+    /// <summary>Master switch for auto-inviting on provision and assignee change.</summary>
+    public bool AutoInvite { get; set; } = true;
+
     public bool IsConfigured => !string.IsNullOrWhiteSpace(BotToken);
 
     public bool IsEligible(string issueType)
