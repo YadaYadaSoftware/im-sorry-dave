@@ -60,7 +60,10 @@ local development and for AWS, consistent with the platform's layered-configurat
 ### Requirement: Deploy, verify, and TUI setup
 
 The playbook SHALL give the operative deploy step (referencing the IaC, not re-documenting it), the
-post-deploy verification checks, and how to configure and launch the smoke-test TUI.
+post-deploy verification checks, and how to configure and launch the smoke-test TUI. The playbook
+SHALL state that the **TUI is optional and is never deployed** — it is a local operator tool that is
+useful for smoke-testing different areas of the platform (it drives whichever API target is selected,
+local or remote).
 
 #### Scenario: Administrator deploys and verifies
 
@@ -68,6 +71,12 @@ post-deploy verification checks, and how to configure and launch the smoke-test 
 - **THEN** they run the deploy step, verify `/health`, the work-item list against real Jira, and the
   webhook secret enforcement (401 unsigned / 200 signed), and configure the TUI targets
   (`local`/`aws`) and the webhook-secret user-secret, then launch it
+
+#### Scenario: TUI is optional
+
+- **WHEN** an administrator reads the TUI section
+- **THEN** it states that the TUI is not part of the deployment — it is an optional local tool for
+  smoke-testing areas of the platform, and the platform runs fully without it
 
 ### Requirement: Administrator smoke-test walkthrough
 
@@ -93,3 +102,19 @@ gotchas with their fixes.
   exiting while CloudFormation succeeds, a provisioned Slack channel not appearing, or Jira Cloud
   email privacy)
 - **THEN** the troubleshooting section explains the cause and the fix
+
+### Requirement: Azure deployment is documented
+
+The playbook SHALL document deploying to Azure as an alternative to AWS — the cloud selector, the
+Azure prerequisites and resources (Azure Container Apps, Azure Files, Azure Key Vault, managed
+HTTPS), how secrets are provisioned for Azure, and how the TUI targets it — with the Azure-specific
+differences from the AWS path called out. Where the Azure path depends on the `azure-deployment`
+change not yet being implemented, the playbook SHALL state that status clearly.
+
+#### Scenario: Administrator deploys to Azure
+
+- **WHEN** an administrator follows the Azure section
+- **THEN** it shows the cloud selector (`--cloud azure`), the Azure prerequisites (`az login`, a
+  subscription), the resources created (Container Apps, Azure Files for the SQLite mount, Key Vault),
+  how secrets reach Key Vault, the managed HTTPS endpoint, and how to point the TUI at the Azure
+  target — noting the parts pending implementation of the `azure-deployment` change

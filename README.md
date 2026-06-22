@@ -210,6 +210,10 @@ Slack app from `docs/slack-app-manifest.yaml`.
 
 ## Deploying to AWS (`aws-aspire-deployment`)
 
+> **Full administrator deploy guide:** see **[`INSTRUCTIONS.md`](INSTRUCTIONS.md)** — accounts,
+> Jira/Slack permissions and keys, secret provisioning, TUI setup, a manual smoke-test walkthrough,
+> and troubleshooting. The section below is an overview.
+
 The Aspire AppHost deploys the **API** (only) to AWS ECS Fargate via `aspire deploy`. Live at
 **https://jsg.appcloud.systems**. The interactive console is never deployed (it's added only in
 `builder.ExecutionContext.IsRunMode`).
