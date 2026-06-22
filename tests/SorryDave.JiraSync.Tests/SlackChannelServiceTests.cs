@@ -205,9 +205,89 @@ public class SlackChannelServiceTests
         Assert.Contains(prov.ChannelId, slack.Unarchived);
     }
 
+    [Fact]
+    public async Task Created_notification_auto_provisions_for_eligible_type()
+    {
+        using var db = new TestDb();
+        Seed(db, type: "Idea");
+        var slack = new FakeSlackClient();
+        var svc = Service(db, slack, new SlackOptions { EligibleIssueTypes = { "Idea" } });
+
+        await svc.OnWorkItemChangedAsync(new WorkItemChange { Key = "MDP-7", Status = "To Do", Created = true });
+
+        Assert.Single(slack.Created);
+        Assert.NotNull(await new MappingStore(db.NewContext(), TimeProvider.System)
+            .ResolveByResourceAsync(ResourceType.SlackChannel, "C1"));
+    }
+
+    [Fact]
+    public async Task Created_notification_skips_ineligible_type()
+    {
+        using var db = new TestDb();
+        Seed(db, type: "Bug");
+        var slack = new FakeSlackClient();
+        var svc = Service(db, slack, new SlackOptions { EligibleIssueTypes = { "Idea" } });
+
+        await svc.OnWorkItemChangedAsync(new WorkItemChange { Key = "MDP-7", Status = "To Do", Created = true });
+
+        Assert.Empty(slack.Created);
+    }
+
+    [Fact]
+    public async Task Welcome_pins_title_link_header_and_posts_description_separately()
+    {
+        using var db = new TestDb();
+        Seed(db, summary: "Build Slack Channel", description: "Do the thing in detail.");
+        var slack = new FakeSlackClient();
+
+        await Service(db, slack).ProvisionAsync("MDP-7");
+
+        // Pinned header carries title + Jira link, not the description body.
+        Assert.Single(slack.PinnedText);
+        Assert.Contains("MDP-7", slack.PinnedText[0]);
+        Assert.Contains("Jira: https://x.atlassian.net/browse/MDP-7", slack.PinnedText[0]);
+        Assert.DoesNotContain("Do the thing", slack.PinnedText[0]);
+        // Description is its own (unpinned) message.
+        Assert.Contains(slack.Messages, m => m.Text == "Do the thing in detail.");
+    }
+
+    [Fact]
+    public async Task Empty_description_posts_no_description_message()
+    {
+        using var db = new TestDb();
+        Seed(db, description: null);
+        var slack = new FakeSlackClient();
+
+        await Service(db, slack).ProvisionAsync("MDP-7");
+
+        Assert.Single(slack.Messages); // only the header
+    }
+
+    [Fact]
+    public async Task Provision_invites_creator_and_mentioned_users()
+    {
+        using var db = new TestDb();
+        Seed(db, reporterAccountId: "acc-creator", reporterDisplayName: "Creator",
+            mentionedAccountIds: new() { "acc-alice", "acc-bob" });
+        var slack = new FakeSlackClient();
+        var options = new SlackOptions
+        {
+            BotToken = "xoxb-test",
+            UserMap = { ["acc-creator"] = "U-creator", ["acc-alice"] = "U-alice" }, // bob unmapped
+        };
+
+        var result = await Service(db, slack, options).ProvisionAsync("MDP-7");
+
+        var invited = slack.Invited.Where(i => i.Channel == result.ChannelId).Select(i => i.User).ToList();
+        Assert.Contains("U-creator", invited); // creator (reporter)
+        Assert.Contains("U-alice", invited);   // mentioned + mapped
+        Assert.DoesNotContain("U-bob", invited); // mentioned but unmapped → skipped (no throw)
+    }
+
     private static WorkItem Seed(TestDb db, string key = "MDP-7", string type = "Idea",
         string status = "To Do", string summary = "Build Slack Channel",
-        string? assigneeAccountId = null, string? assigneeDisplayName = null, string? reporterDisplayName = null)
+        string? assigneeAccountId = null, string? assigneeDisplayName = null, string? reporterDisplayName = null,
+        string? reporterAccountId = null, string? description = null, List<string>? mentionedAccountIds = null)
     {
         var item = new WorkItem
         {
@@ -218,7 +298,10 @@ public class SlackChannelServiceTests
             Summary = summary,
             AssigneeAccountId = assigneeAccountId,
             AssigneeDisplayName = assigneeDisplayName,
+            ReporterAccountId = reporterAccountId,
             ReporterDisplayName = reporterDisplayName,
+            Description = description,
+            MentionedAccountIds = mentionedAccountIds ?? new(),
             JiraUpdated = DateTimeOffset.UtcNow,
             FirstSeenUtc = DateTimeOffset.UtcNow,
             LastSyncedUtc = DateTimeOffset.UtcNow,
@@ -254,7 +337,10 @@ public class SlackChannelServiceTests
         public int FailCreateWithNameTaken { get; set; }
         /// <summary>Channel ids that GetChannelInfo should report as gone (simulate out-of-band deletion).</summary>
         public HashSet<string> MissingChannels { get; } = new();
+        /// <summary>Message text that was pinned (resolved from the pinned ts).</summary>
+        public List<string> PinnedText { get; } = new();
         private readonly Dictionary<string, (string Name, bool Archived)> _channels = new();
+        private readonly Dictionary<string, string> _messageByTs = new();
         private int _seq;
 
         public Task<SlackChannel> CreateChannelAsync(string name, CancellationToken ct = default)
@@ -279,7 +365,9 @@ public class SlackChannelServiceTests
         public Task<string> PostMessageAsync(string channelId, string text, CancellationToken ct = default)
         {
             Messages.Add((channelId, text));
-            return Task.FromResult($"ts{++_seq}");
+            var ts = $"ts{++_seq}";
+            _messageByTs[ts] = text;
+            return Task.FromResult(ts);
         }
 
         public Task SetTopicAsync(string channelId, string topic, CancellationToken ct = default) => Task.CompletedTask;
@@ -296,7 +384,11 @@ public class SlackChannelServiceTests
             if (_channels.TryGetValue(channelId, out var c)) _channels[channelId] = (c.Name, false);
             return Task.CompletedTask;
         }
-        public Task PinMessageAsync(string channelId, string messageTs, CancellationToken ct = default) => Task.CompletedTask;
+        public Task PinMessageAsync(string channelId, string messageTs, CancellationToken ct = default)
+        {
+            if (_messageByTs.TryGetValue(messageTs, out var text)) PinnedText.Add(text);
+            return Task.CompletedTask;
+        }
         public Task<string?> LookupUserIdByEmailAsync(string email, CancellationToken ct = default) => Task.FromResult<string?>(null);
         public Task InviteAsync(string channelId, string userId, CancellationToken ct = default) { Invited.Add((channelId, userId)); return Task.CompletedTask; }
     }

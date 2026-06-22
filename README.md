@@ -12,9 +12,13 @@ conversations back into Jira. Planned capabilities live as OpenSpec changes unde
 | `jira-sync-core` | **Implemented** (archived) |
 | `aspire-apphost` | **Implemented** (archived) — AppHost + ServiceDefaults + console-as-API-client |
 | `tui-smoke-test` | **Implemented** (archived) — interactive smoke TUI |
-| `slack-channel-provisioning` | Proposed (decision-complete) |
+| `tui-api-target-selection` | **Implemented** (archived) — local/aws target switching |
+| `aws-aspire-deployment` | **Implemented** (archived) — live on AWS |
+| `secrets-configuration-convention` | **Implemented** (archived) — SSM Parameter Store |
+| `slack-channel-provisioning` | **Implemented** (archived) — channel per work item, lifecycle, invites |
+| `slack-auto-provision` | **Implemented** — auto-provision on item creation; creator + mentions invited |
 | `slack-conversation-summarization` | Proposed (decision-complete) |
-| `aws-aspire-deployment` | Proposed — deploy via `aspire deploy` to AWS; **Azure is the eventual home** (portable container + PostgreSQL) |
+| `aws-aspire-deployment (Azure)` | Proposed (`azure-deployment`) — also deploy to Azure (ACA + Azure Files + Key Vault) |
 | `github-work-item-linking` | Proposed |
 | `openspec-jira-linking` | Proposed |
 | `console-control-app` | Proposed |
@@ -175,6 +179,31 @@ What you can do (all via the API):
 
 Keys: `F5` refresh · `Ctrl-R` smoke run · `Ctrl-Q` quit. The guided-run logic is covered
 headlessly by `JiraSyncSmokeRunnerTests` (using an in-memory fake API client).
+
+## Slack channels (`slack-channel-provisioning`, `slack-auto-provision`)
+
+Each tracked work item gets its own Slack channel, mirroring the item's lifecycle.
+
+- **Auto-provisioned on creation.** When a new work item is created (the `jira:issue_created`
+  webhook), an eligible item automatically gets a public channel named `<jira-key>-<summary-slug>`.
+  Eligibility is scoped by `Slack:EligibleIssueTypes` (e.g. `["Idea"]`); leaving it empty makes
+  **every** new item provision a channel — set it to keep channel sprawl in check. Explicit
+  provisioning (TUI **Slack → Provision**, or `POST /slack/{key}/provision`) still works and is
+  idempotent.
+- **Welcome messages.** Two messages are posted: a **pinned** header with the item's title and a Jira
+  link, then a second message with the description.
+- **Invites.** The configured `Slack:InviteUserIds`, the assignee, the item's **creator** (reporter),
+  and anyone **@mentioned in the description** are invited (resolved via `Slack:UserMap`; unresolved
+  are skipped). On Jira Cloud, user emails are private, so identities map via `UserMap`
+  (Jira accountId or displayName → Slack id) rather than by email.
+- **Lifecycle.** Status → closed archives the channel (with a closing note); reopen unarchives;
+  status/assignee changes update the topic and post a note. A periodic sweep reconciles links against
+  Slack (dangling links, archived-state drift); `POST /slack/reconcile` runs it on demand.
+
+Config (`Slack` section): non-secret `EligibleIssueTypes`, `InviteUserIds`, `UserMap`, `AutoInvite`,
+`ReconciliationInterval` in `appsettings.json`; `BotToken` + `SigningSecret` are secrets (user-secrets
+locally, SSM `/jira-sync/Slack/*` in AWS). With no `BotToken` the integration is dormant. Create the
+Slack app from `docs/slack-app-manifest.yaml`.
 
 ## Deploying to AWS (`aws-aspire-deployment`)
 

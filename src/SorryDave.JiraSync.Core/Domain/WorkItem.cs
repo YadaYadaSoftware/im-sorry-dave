@@ -15,6 +15,7 @@ public class WorkItem
 
     public string? AssigneeAccountId { get; set; }
     public string? AssigneeDisplayName { get; set; }
+    public string? ReporterAccountId { get; set; }
     public string? ReporterDisplayName { get; set; }
 
     public string Summary { get; set; } = default!;
@@ -22,6 +23,9 @@ public class WorkItem
 
     /// <summary>Labels stored via a value converter as a single column.</summary>
     public List<string> Labels { get; set; } = new();
+
+    /// <summary>AccountIds @mentioned in the description (for channel invites). Stored like Labels.</summary>
+    public List<string> MentionedAccountIds { get; set; } = new();
 
     /// <summary>
     /// The Jira <c>fields.updated</c> timestamp. Acts as the version marker used to

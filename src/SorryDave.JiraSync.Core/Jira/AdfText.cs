@@ -18,6 +18,38 @@ public static class AdfText
         return sb.ToString().Trim();
     }
 
+    /// <summary>Collect distinct accountIds of <c>mention</c> nodes (<c>attrs.id</c>) anywhere in the doc.</summary>
+    public static List<string> CollectMentionAccountIds(JsonElement node)
+    {
+        var ids = new List<string>();
+        WalkMentions(node, ids);
+        return ids;
+    }
+
+    private static void WalkMentions(JsonElement node, List<string> ids)
+    {
+        if (node.ValueKind == JsonValueKind.Object)
+        {
+            if (node.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String &&
+                t.GetString() == "mention" &&
+                node.TryGetProperty("attrs", out var attrs) && attrs.ValueKind == JsonValueKind.Object &&
+                attrs.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String)
+            {
+                var value = id.GetString();
+                if (!string.IsNullOrWhiteSpace(value) && !ids.Contains(value)) ids.Add(value!);
+            }
+
+            if (node.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array)
+                foreach (var child in content.EnumerateArray())
+                    WalkMentions(child, ids);
+        }
+        else if (node.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var child in node.EnumerateArray())
+                WalkMentions(child, ids);
+        }
+    }
+
     private static void Walk(JsonElement node, StringBuilder sb)
     {
         if (node.ValueKind == JsonValueKind.Object)

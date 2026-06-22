@@ -160,6 +160,14 @@ public sealed class SlackChannelService : ISlackChannelService
     {
         if (!_options.IsConfigured) return;
 
+        // A newly created work item auto-provisions its channel (eligible types only); ProvisionAsync
+        // is idempotent and seeds context + invites, so we're done.
+        if (change.Created)
+        {
+            await ProvisionAsync(change.Key, dryRun: false, ct);
+            return;
+        }
+
         var mapping = await GetChannelMappingAsync(change.Key, ct);
         if (mapping is null) return; // no channel → nothing to reflect
         var channelId = mapping.ResourceId;
@@ -187,7 +195,7 @@ public sealed class SlackChannelService : ISlackChannelService
         {
             await TryAsync(() => _slack.PostMessageAsync(channelId, $"Assignee → {change.AssigneeDisplayName ?? "_unassigned_"}", ct), change.Key, "assignee note");
             await InviteParticipantsAsync(channelId, change.Key,
-                new JiraUserRef(change.AssigneeAccountId, change.AssigneeDisplayName, null), reporter: null, ct);
+                new[] { new JiraUserRef(change.AssigneeAccountId, change.AssigneeDisplayName, null) }, ct);
         }
     }
 
@@ -196,26 +204,34 @@ public sealed class SlackChannelService : ISlackChannelService
         var url = BrowseUrl(item.Key);
         await TryAsync(() => _slack.SetTopicAsync(channelId, BuildTopic(item.Status, item.AssigneeDisplayName, url), ct), item.Key, "topic");
 
-        var ts = await _slack.PostMessageAsync(channelId, BuildContext(item, url), ct);
-        await TryAsync(() => _slack.PinMessageAsync(channelId, ts, ct), item.Key, "pin");
+        // Two welcome messages: a pinned header (title + Jira link), then the description.
+        var headerTs = await _slack.PostMessageAsync(channelId, BuildHeader(item, url), ct);
+        await TryAsync(() => _slack.PinMessageAsync(channelId, headerTs, ct), item.Key, "pin");
+        if (!string.IsNullOrWhiteSpace(item.Description))
+            await TryAsync(() => _slack.PostMessageAsync(channelId, Truncate(item.Description!, 3000), ct), item.Key, "description");
 
-        await InviteParticipantsAsync(channelId, item.Key,
-            new JiraUserRef(item.AssigneeAccountId, item.AssigneeDisplayName, null),
-            new JiraUserRef(null, item.ReporterDisplayName, null), ct);
+        // Invite the assignee, the creator (reporter), and everyone @mentioned in the description.
+        var participants = new List<JiraUserRef>
+        {
+            new(item.AssigneeAccountId, item.AssigneeDisplayName, null),
+            new(item.ReporterAccountId, item.ReporterDisplayName, null),
+        };
+        participants.AddRange(item.MentionedAccountIds.Select(id => new JiraUserRef(id, null, null)));
+        await InviteParticipantsAsync(channelId, item.Key, participants, ct);
     }
 
     /// <summary>Invite the fixed watcher list plus any resolvable Jira participants. All best-effort
     /// and idempotent; unresolved identities are skipped (not an error).</summary>
-    private async Task InviteParticipantsAsync(string channelId, string key, JiraUserRef? assignee, JiraUserRef? reporter, CancellationToken ct)
+    private async Task InviteParticipantsAsync(string channelId, string key, IEnumerable<JiraUserRef> participants, CancellationToken ct)
     {
         if (!_options.AutoInvite) return;
 
         foreach (var userId in _options.InviteUserIds)
             await TryAsync(() => _slack.InviteAsync(channelId, userId, ct), key, "invite (fixed)");
 
-        foreach (var participant in new[] { assignee, reporter })
+        foreach (var participant in participants)
         {
-            if (participant is null || participant.IsEmpty) continue;
+            if (participant.IsEmpty) continue;
             var slackId = await ResolveAsync(participant, ct);
             if (slackId is not null)
                 await TryAsync(() => _slack.InviteAsync(channelId, slackId, ct), key, "invite (participant)");
@@ -250,18 +266,19 @@ public sealed class SlackChannelService : ISlackChannelService
         return topic.Length > 250 ? topic[..250] : topic;
     }
 
-    private static string BuildContext(WorkItem item, string? url)
+    /// <summary>The pinned header: title (key/type/status + summary) and a link to Jira.</summary>
+    private static string BuildHeader(WorkItem item, string? url)
     {
         var lines = new List<string>
         {
             $"*{item.Key}* · {item.IssueType} · *{item.Status}*",
             item.Summary,
-            "",
-            $"Assignee: {item.AssigneeDisplayName ?? "unassigned"}",
         };
         if (!string.IsNullOrEmpty(url)) lines.Add($"Jira: {url}");
         return string.Join("\n", lines);
     }
+
+    private static string Truncate(string text, int max) => text.Length <= max ? text : text[..max];
 
     private async Task TryAsync(Func<Task> action, string key, string what)
     {

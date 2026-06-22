@@ -14,6 +14,9 @@ public sealed record WorkItemChange
     public string? AssigneeDisplayName { get; init; }
     public string? PreviousAssigneeAccountId { get; init; }
 
+    /// <summary>True when this notification is for a newly created work item (drives auto-provisioning).</summary>
+    public bool Created { get; init; }
+
     public bool StatusChanged => !string.Equals(Status, PreviousStatus, StringComparison.Ordinal);
     public bool AssigneeChanged => !string.Equals(AssigneeAccountId, PreviousAssigneeAccountId, StringComparison.Ordinal);
 }

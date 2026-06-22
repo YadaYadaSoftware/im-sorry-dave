@@ -21,8 +21,9 @@ public static class JiraIssueParser
         var status = TryGetNested(fields, "status", "name") ?? "Unknown";
         var summary = GetString(fields, "summary") ?? "(no summary)";
         var description = ExtractDescription(fields);
+        var mentions = ExtractMentions(fields);
 
-        string? assigneeAccountId = null, assigneeDisplay = null, reporterDisplay = null;
+        string? assigneeAccountId = null, assigneeDisplay = null, reporterAccountId = null, reporterDisplay = null;
         if (fields.ValueKind == JsonValueKind.Object)
         {
             if (fields.TryGetProperty("assignee", out var a) && a.ValueKind == JsonValueKind.Object)
@@ -31,7 +32,10 @@ public static class JiraIssueParser
                 assigneeDisplay = GetString(a, "displayName");
             }
             if (fields.TryGetProperty("reporter", out var r) && r.ValueKind == JsonValueKind.Object)
+            {
+                reporterAccountId = GetString(r, "accountId");
                 reporterDisplay = GetString(r, "displayName");
+            }
         }
 
         var labels = new List<string>();
@@ -52,10 +56,12 @@ public static class JiraIssueParser
             Status = status,
             AssigneeAccountId = assigneeAccountId,
             AssigneeDisplayName = assigneeDisplay,
+            ReporterAccountId = reporterAccountId,
             ReporterDisplayName = reporterDisplay,
             Summary = summary,
             Description = description,
             Labels = labels,
+            MentionedAccountIds = mentions,
             Updated = updated
         };
     }
@@ -82,6 +88,15 @@ public static class JiraIssueParser
             JsonValueKind.Object => AdfText.Flatten(d),
             _ => null
         };
+    }
+
+    /// <summary>AccountIds @mentioned in the description (only present in ADF / REST v3 payloads).</summary>
+    private static List<string> ExtractMentions(JsonElement fields)
+    {
+        if (fields.ValueKind == JsonValueKind.Object &&
+            fields.TryGetProperty("description", out var d) && d.ValueKind == JsonValueKind.Object)
+            return AdfText.CollectMentionAccountIds(d);
+        return new();
     }
 
     private static DateTimeOffset ParseTimestamp(string? value)

@@ -12,9 +12,12 @@ public record JiraIssueData
     public required string Status { get; init; }
     public string? AssigneeAccountId { get; init; }
     public string? AssigneeDisplayName { get; init; }
+    public string? ReporterAccountId { get; init; }
     public string? ReporterDisplayName { get; init; }
     public required string Summary { get; init; }
     public string? Description { get; init; }
     public List<string> Labels { get; init; } = new();
+    /// <summary>AccountIds of users @mentioned in the description (for channel invites).</summary>
+    public List<string> MentionedAccountIds { get; init; } = new();
     public required DateTimeOffset Updated { get; init; }
 }

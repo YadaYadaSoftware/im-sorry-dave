@@ -30,6 +30,11 @@ public class JiraSyncDbContext : DbContext
                     v => string.Join('\n', v),
                     v => v.Length == 0 ? new List<string>() : v.Split('\n', StringSplitOptions.None).ToList())
                 .Metadata.SetValueComparer(labelsComparer);
+            b.Property(w => w.MentionedAccountIds)
+                .HasConversion(
+                    v => string.Join('\n', v),
+                    v => v.Length == 0 ? new List<string>() : v.Split('\n', StringSplitOptions.None).ToList())
+                .Metadata.SetValueComparer(labelsComparer);
             b.HasIndex(w => w.ProjectKey);
             b.HasIndex(w => w.JiraUpdated);
         });

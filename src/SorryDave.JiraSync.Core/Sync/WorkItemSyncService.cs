@@ -45,16 +45,28 @@ public class WorkItemSyncService : IWorkItemSyncService
                 Status = issue.Status,
                 AssigneeAccountId = issue.AssigneeAccountId,
                 AssigneeDisplayName = issue.AssigneeDisplayName,
+                ReporterAccountId = issue.ReporterAccountId,
                 ReporterDisplayName = issue.ReporterDisplayName,
                 Summary = issue.Summary,
                 Description = issue.Description,
                 Labels = issue.Labels,
+                MentionedAccountIds = issue.MentionedAccountIds,
                 JiraUpdated = issue.Updated,
                 FirstSeenUtc = now,
                 LastSyncedUtc = now
             });
             await _db.SaveChangesAsync(ct);
             _logger.LogInformation("Mirrored new work item {Key}.", issue.Key);
+
+            await NotifyAsync(new WorkItemChange
+            {
+                Key = issue.Key,
+                Status = issue.Status,
+                AssigneeAccountId = issue.AssigneeAccountId,
+                AssigneeDisplayName = issue.AssigneeDisplayName,
+                Created = true,
+            }, ct);
+
             return SyncOutcome.Created;
         }
 
@@ -75,10 +87,12 @@ public class WorkItemSyncService : IWorkItemSyncService
         existing.Status = issue.Status;
         existing.AssigneeAccountId = issue.AssigneeAccountId;
         existing.AssigneeDisplayName = issue.AssigneeDisplayName;
+        existing.ReporterAccountId = issue.ReporterAccountId;
         existing.ReporterDisplayName = issue.ReporterDisplayName;
         existing.Summary = issue.Summary;
         existing.Description = issue.Description;
         existing.Labels = issue.Labels;
+        existing.MentionedAccountIds = issue.MentionedAccountIds;
         existing.JiraUpdated = issue.Updated;
         existing.LastSyncedUtc = now;
         existing.IsDeleted = false; // a fresh update means it exists again
