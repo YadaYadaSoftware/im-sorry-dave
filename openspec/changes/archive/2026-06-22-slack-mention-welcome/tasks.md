@@ -24,6 +24,6 @@
 
 ## 4. Deploy & verify
 
-- [ ] 4.1 Deploy; add a comment mentioning a non-member user on an item with a channel → confirm they
+- [x] 4.1 Deploy; add a comment mentioning a non-member user on an item with a channel → confirm they
       are invited and a welcome message with the comment text is posted
 - [x] 4.2 Docs: note the mention-welcome message in the README Slack section
