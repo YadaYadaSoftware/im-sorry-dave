@@ -472,6 +472,12 @@ public class SlackChannelServiceTests
             return Task.FromResult(ts);
         }
 
+        public Task<string> PostBlocksAsync(string channelId, string fallbackText, object blocks, CancellationToken ct = default)
+        {
+            Messages.Add((channelId, fallbackText));
+            return Task.FromResult($"ts{++_seq}");
+        }
+
         public Task SetTopicAsync(string channelId, string topic, CancellationToken ct = default) => Task.CompletedTask;
         public Task SetPurposeAsync(string channelId, string purpose, CancellationToken ct = default) => Task.CompletedTask;
         public Task ArchiveAsync(string channelId, CancellationToken ct = default)

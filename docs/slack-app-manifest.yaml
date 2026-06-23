@@ -10,32 +10,46 @@
 #   - Signing secret: Basic Information  ->  App Credentials  ->  "Signing Secret"
 #                     ->  config key  Slack:SigningSecret
 #
-# These bot scopes cover channel provisioning + lifecycle + context reflection. The slash command
-# and Events API request URLs are added LATER (Slack validates those URLs live, so they go in once
-# the /slack/commands and /slack/events endpoints are deployed). The first trigger is the console
-# command, which needs only the bot token.
+# The request URLs below point at the deployed API (https://jsg.appcloud.systems). Slack validates the
+# Events URL live (it must answer the url_verification challenge) — the /slack/events endpoint is
+# deployed and does this. Change the host if you deploy elsewhere.
 
 display_information:
   name: im-sorry-dave
-  description: Provisions a Slack channel per Jira work item and reflects its status back.
+  description: Provisions a Slack channel per Jira work item and summarizes conversations back to Jira.
   background_color: "#1a1a2e"
 
 features:
   bot_user:
     display_name: im-sorry-dave
     always_online: true
+  slash_commands:
+    - command: /post
+      url: https://jsg.appcloud.systems/slack/commands
+      description: Summarize the conversation since the last /post and post candidates for Jira
+      should_escape: false
 
 oauth_config:
   scopes:
     bot:
       - channels:manage      # create / archive / unarchive public channels, set topic & purpose, invite
       - channels:read        # look up channels (name-collision detection, link reconciliation)
-      - chat:write           # post the context / status / closing messages
+      - channels:history     # read channel messages for conversation capture (Events API)
+      - chat:write           # post context / status / candidate cards / results
+      - commands             # the /post slash command
       - pins:write           # pin the Jira link in the channel
       - users:read           # resolve Slack users
       - users:read.email     # map Jira users to Slack users by email (best-effort)
 
 settings:
+  event_subscriptions:
+    request_url: https://jsg.appcloud.systems/slack/events
+    bot_events:
+      - message.channels     # capture conversation in provisioned channels
+      - app_mention
+  interactivity:
+    is_enabled: true
+    request_url: https://jsg.appcloud.systems/slack/interactivity   # Confirm/Reject candidate buttons
   org_deploy_enabled: false
   socket_mode_enabled: false
   token_rotation_enabled: false

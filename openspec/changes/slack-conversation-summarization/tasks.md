@@ -1,6 +1,6 @@
 ## 1. Slack event intake
 
-- [ ] 1.1 Add Events API subscriptions (`message.channels`, `app_mention`) and the request endpoint
+- [x] 1.1 Add Events API subscriptions (`message.channels`, `app_mention`) and the request endpoint
 - [x] 1.2 Verify Slack request signatures and respond to the URL verification challenge
 - [x] 1.3 De-duplicate redelivered events
 
@@ -19,7 +19,7 @@
 
 ## 4. Confirmation & commands
 
-- [ ] 4.1 Present candidates in Slack as interactive messages (confirm / edit / reject)
+- [x] 4.1 Present candidates in Slack as interactive messages (confirm / edit / reject)
 - [ ] 4.2 Implement the explicit summarize triggers: the **`/post`** slash command and the configured emoji-reaction cue
 - [x] 4.3 Implement the `/post` window: a **per-channel cursor** of the last successful `/post`; window = messages since that cursor (whole conversation on first post); advance the cursor only on a successful write-back, never on a no-op/rejected/failed post
 - [x] 4.4 Handle the command/confirmation in unlinked channels gracefully
@@ -28,7 +28,7 @@
 
 - [x] 5.1 Submit confirmed candidates to `jira-decision-writeback` with source + confirming-user attribution
 - [ ] 5.2 Record open questions detected in Slack against the work item for answer tracking
-- [ ] 5.3 Report write-back success/failure back into the originating channel
+- [x] 5.3 Report write-back success/failure back into the originating channel
 
 ## 6. Cost control & validation
 

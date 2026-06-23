@@ -73,6 +73,12 @@ public sealed class SlackWebApiClient : ISlackClient
         return json.GetProperty("ts").GetString()!;
     }
 
+    public async Task<string> PostBlocksAsync(string channelId, string fallbackText, object blocks, CancellationToken ct = default)
+    {
+        var json = await PostAsync("chat.postMessage", new { channel = channelId, text = fallbackText, blocks }, ct);
+        return json.GetProperty("ts").GetString()!;
+    }
+
     public Task SetTopicAsync(string channelId, string topic, CancellationToken ct = default)
         => PostAsync("conversations.setTopic", new { channel = channelId, topic }, ct);
 

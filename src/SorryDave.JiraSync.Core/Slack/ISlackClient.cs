@@ -21,6 +21,10 @@ public interface ISlackClient
     /// <summary>Post a message; returns the message timestamp (ts) for pinning.</summary>
     Task<string> PostMessageAsync(string channelId, string text, CancellationToken ct = default);
 
+    /// <summary>Post a Block Kit message (interactive cards); <paramref name="fallbackText"/> is the
+    /// notification text. Returns the message ts.</summary>
+    Task<string> PostBlocksAsync(string channelId, string fallbackText, object blocks, CancellationToken ct = default);
+
     Task SetTopicAsync(string channelId, string topic, CancellationToken ct = default);
     Task SetPurposeAsync(string channelId, string purpose, CancellationToken ct = default);
     Task ArchiveAsync(string channelId, CancellationToken ct = default);

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -35,6 +36,23 @@ public class SignatureAndRedactionTests
         var muchLater = Now.AddMinutes(10);
 
         Assert.False(SlackSignatureVerifier.IsValid(secret, sig, ts, body, muchLater));
+    }
+
+    [Fact]
+    public void Candidate_card_has_confirm_reject_buttons_carrying_the_id()
+    {
+        var c = new SummaryCandidate
+        {
+            Id = Guid.NewGuid(), WorkItemKey = "MDP-7", Kind = WriteBackKind.Decision,
+            Content = "ship Friday", Evidence = "alice", Confidence = 0.9,
+        };
+        var json = JsonSerializer.Serialize(CandidateBlocks.Card(c));
+
+        Assert.Contains("\"action_id\":\"confirm\"", json);
+        Assert.Contains("\"action_id\":\"reject\"", json);
+        Assert.Contains(c.Id.ToString(), json);       // button value = candidate id
+        Assert.Contains("ship Friday", json);
+        Assert.Contains("\"type\":\"actions\"", json);
     }
 
     [Fact]
