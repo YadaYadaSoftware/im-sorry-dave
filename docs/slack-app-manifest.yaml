@@ -46,7 +46,6 @@ settings:
     request_url: https://jsg.appcloud.systems/slack/events
     bot_events:
       - message.channels     # capture conversation in provisioned channels
-      - app_mention
   interactivity:
     is_enabled: true
     request_url: https://jsg.appcloud.systems/slack/interactivity   # Confirm/Reject candidate buttons
