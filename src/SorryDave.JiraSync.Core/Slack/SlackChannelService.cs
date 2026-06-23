@@ -62,7 +62,24 @@ public sealed class SlackChannelService : ISlackChannelService
         if (dryRun)
             return new("DryRun", ChannelName: SlackChannelNaming.Derive(item.Key, item.Summary), Detail: "Would create channel.");
 
-        // Create, resolving name collisions with a deterministic suffix.
+        // Idempotency: if a channel with our derived name already exists in Slack and is NOT mapped to
+        // another work item (an orphan from a prior run/race/mirror-rebuild), adopt it instead of
+        // creating a duplicate — honoring "no duplicate channel created".
+        var baseName = SlackChannelNaming.Derive(item.Key, item.Summary);
+        var existingByName = await _slack.FindChannelByNameAsync(baseName, ct);
+        if (existingByName is not null)
+        {
+            var owner = await _mappings.ResolveByResourceAsync(ResourceType.SlackChannel, existingByName.Id, ct);
+            if (owner is null || owner.Key == item.Key)
+            {
+                await _mappings.LinkAsync(ResourceType.SlackChannel, existingByName.Id, item.Key, existingByName.Name, ct);
+                _logger.LogInformation("Adopted existing channel {Channel} for {Key} (no duplicate created).", existingByName.Name, item.Key);
+                return new("Adopted", existingByName.Id, existingByName.Name);
+            }
+            // Owned by a different work item → genuine name collision; fall through to a suffixed create.
+        }
+
+        // Create, resolving genuine name collisions (a different item) with a deterministic suffix.
         SlackChannel channel;
         string? suffix = null;
         var n = 1;

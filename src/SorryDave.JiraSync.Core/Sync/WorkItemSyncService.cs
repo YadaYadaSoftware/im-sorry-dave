@@ -30,7 +30,7 @@ public class WorkItemSyncService : IWorkItemSyncService
         _listeners = listeners?.ToList() ?? (IReadOnlyList<IWorkItemChangeListener>)Array.Empty<IWorkItemChangeListener>();
     }
 
-    public async Task<SyncOutcome> ApplyIssueAsync(JiraIssueData issue, CancellationToken ct = default)
+    public async Task<SyncOutcome> ApplyIssueAsync(JiraIssueData issue, CancellationToken ct = default, bool emitCreatedEvents = true)
     {
         var now = _clock.GetUtcNow();
         var existing = await _db.WorkItems.FirstOrDefaultAsync(w => w.Key == issue.Key, ct);
@@ -58,14 +58,17 @@ public class WorkItemSyncService : IWorkItemSyncService
             await _db.SaveChangesAsync(ct);
             _logger.LogInformation("Mirrored new work item {Key}.", issue.Key);
 
-            await NotifyAsync(new WorkItemChange
-            {
-                Key = issue.Key,
-                Status = issue.Status,
-                AssigneeAccountId = issue.AssigneeAccountId,
-                AssigneeDisplayName = issue.AssigneeDisplayName,
-                Created = true,
-            }, ct);
+            // Only a genuine creation event (webhook) auto-provisions; backfill/reconcile re-discovery
+            // does not, so a mirror rebuild can't re-provision (and duplicate) channels.
+            if (emitCreatedEvents)
+                await NotifyAsync(new WorkItemChange
+                {
+                    Key = issue.Key,
+                    Status = issue.Status,
+                    AssigneeAccountId = issue.AssigneeAccountId,
+                    AssigneeDisplayName = issue.AssigneeDisplayName,
+                    Created = true,
+                }, ct);
 
             return SyncOutcome.Created;
         }

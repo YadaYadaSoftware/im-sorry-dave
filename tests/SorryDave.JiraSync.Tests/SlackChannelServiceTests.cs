@@ -154,6 +154,21 @@ public class SlackChannelServiceTests
     }
 
     [Fact]
+    public async Task Provision_adopts_an_existing_unmapped_channel_instead_of_duplicating()
+    {
+        using var db = new TestDb();
+        Seed(db); // MDP-7 "Build Slack Channel"
+        var slack = new FakeSlackClient();
+        var orphanId = slack.SeedExisting("mdp-7-build-slack-channel"); // orphan from a prior run
+
+        var result = await Service(db, slack).ProvisionAsync("MDP-7");
+
+        Assert.Equal("Adopted", result.Outcome);
+        Assert.Equal(orphanId, result.ChannelId);       // linked the existing channel
+        Assert.Empty(slack.Created);                     // no new (e.g. "-2") channel created
+    }
+
+    [Fact]
     public async Task Reconcile_archives_the_channel_when_the_item_is_closed()
     {
         using var db = new TestDb();
@@ -445,9 +460,18 @@ public class SlackChannelServiceTests
         private readonly Dictionary<string, string> _messageByTs = new();
         private int _seq;
 
+        /// <summary>Pre-seed an existing Slack channel (e.g. an orphan), returning its id.</summary>
+        public string SeedExisting(string name)
+        {
+            var id = $"C{++_seq}";
+            _channels[id] = (name, false);
+            return id;
+        }
+
         public Task<SlackChannel> CreateChannelAsync(string name, CancellationToken ct = default)
         {
-            if (FailCreateWithNameTaken-- > 0) throw new SlackApiException("name_taken");
+            if (FailCreateWithNameTaken-- > 0 || _channels.Values.Any(c => c.Name == name))
+                throw new SlackApiException("name_taken");
             Created.Add(name);
             var id = $"C{++_seq}";
             _channels[id] = (name, false);
@@ -455,7 +479,10 @@ public class SlackChannelServiceTests
         }
 
         public Task<SlackChannel?> FindChannelByNameAsync(string name, CancellationToken ct = default)
-            => Task.FromResult<SlackChannel?>(null);
+        {
+            var hit = _channels.FirstOrDefault(kv => kv.Value.Name == name);
+            return Task.FromResult<SlackChannel?>(hit.Key is null ? null : new SlackChannel(hit.Key, hit.Value.Name, hit.Value.Archived));
+        }
 
         public Task<SlackChannel?> GetChannelInfoAsync(string channelId, CancellationToken ct = default)
         {

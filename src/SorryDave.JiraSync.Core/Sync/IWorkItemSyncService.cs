@@ -16,8 +16,11 @@ public enum SyncOutcome
 
 public interface IWorkItemSyncService
 {
-    /// <summary>Upsert an issue into the store, discarding stale/out-of-order data.</summary>
-    Task<SyncOutcome> ApplyIssueAsync(JiraIssueData issue, CancellationToken ct = default);
+    /// <summary>Upsert an issue into the store, discarding stale/out-of-order data.
+    /// <paramref name="emitCreatedEvents"/> is false for backfill/reconcile so re-discovering an item
+    /// (e.g. after a mirror rebuild) does NOT fire the creation trigger that auto-provisions a channel —
+    /// only the genuine <c>jira:issue_created</c> webhook should. Update events still fire.</summary>
+    Task<SyncOutcome> ApplyIssueAsync(JiraIssueData issue, CancellationToken ct = default, bool emitCreatedEvents = true);
 
     /// <summary>Mark a work item as deleted (soft delete, retained for audit).</summary>
     Task<SyncOutcome> ApplyDeletionAsync(string key, CancellationToken ct = default);

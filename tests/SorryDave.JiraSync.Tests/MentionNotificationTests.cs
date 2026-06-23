@@ -45,6 +45,34 @@ public class MentionNotificationTests
     }
 
     [Fact]
+    public async Task Backfill_rediscovery_does_not_fire_the_created_event()
+    {
+        using var db = new TestDb();
+        var listener = new CapturingListener();
+        var sync = new WorkItemSyncService(db.Context, TimeProvider.System, NullLogger<WorkItemSyncService>.Instance,
+            new[] { listener });
+
+        // emitCreatedEvents:false is what backfill/reconcile pass for a (re)discovered item.
+        var outcome = await sync.ApplyIssueAsync(Issue("MDP-7", "2026-06-22T10:00:00Z"), default, emitCreatedEvents: false);
+
+        Assert.Equal(SyncOutcome.Created, outcome);                 // mirrored
+        Assert.DoesNotContain(listener.Changes, c => c.Created);    // but no auto-provision trigger
+    }
+
+    [Fact]
+    public async Task Webhook_creation_does_fire_the_created_event()
+    {
+        using var db = new TestDb();
+        var listener = new CapturingListener();
+        var sync = new WorkItemSyncService(db.Context, TimeProvider.System, NullLogger<WorkItemSyncService>.Instance,
+            new[] { listener });
+
+        await sync.ApplyIssueAsync(Issue("MDP-7", "2026-06-22T10:00:00Z")); // default emitCreatedEvents:true (webhook)
+
+        Assert.Contains(listener.Changes, c => c.Created);
+    }
+
+    [Fact]
     public async Task Comment_created_webhook_notifies_listeners_with_comment_body_mentions()
     {
         using var db = new TestDb();

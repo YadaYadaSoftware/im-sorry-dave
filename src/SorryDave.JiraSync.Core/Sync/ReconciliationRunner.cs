@@ -40,7 +40,7 @@ public class ReconciliationRunner
         var jql = BuildJql(updatedSince: null);
         var issues = await _jira.SearchAsync(jql, ct);
         foreach (var issue in issues)
-            await _sync.ApplyIssueAsync(issue, ct);
+            await _sync.ApplyIssueAsync(issue, ct, emitCreatedEvents: false); // re-discovery, not creation
 
         // Anything we still track that Jira did not return is treated as deleted.
         var seen = issues.Select(i => i.Key).ToHashSet();
@@ -60,7 +60,7 @@ public class ReconciliationRunner
         var jql = BuildJql(updatedSince);
         var issues = await _jira.SearchAsync(jql, ct);
         foreach (var issue in issues)
-            await _sync.ApplyIssueAsync(issue, ct);
+            await _sync.ApplyIssueAsync(issue, ct, emitCreatedEvents: false); // re-discovery, not creation
 
         if (issues.Count > 0)
             _logger.LogInformation("Reconciliation sweep refreshed {Count} issue(s).", issues.Count);
