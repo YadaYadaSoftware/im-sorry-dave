@@ -127,7 +127,7 @@ appsettings.json (non-secret defaults)  →  SSM /jira-sync/* (prod)  →  env v
 | `Webhook:Secret` | API user-secrets | SSM `/jira-sync/Webhook/Secret` | `aws ssm put-parameter` |
 | `Slack:BotToken` | API + AppHost user-secrets | SSM `/jira-sync/Slack/BotToken` | **AppHost transport** on deploy |
 | `Slack:SigningSecret` | API + AppHost user-secrets | SSM `/jira-sync/Slack/SigningSecret` | **AppHost transport** on deploy |
-| `Anthropic:ApiKey` *(future)* | user-secrets | SSM `/jira-sync/Anthropic/ApiKey` | tbd |
+| `Anthropic:ApiKey` | API + AppHost user-secrets | SSM `/jira-sync/Anthropic/ApiKey` | **AppHost transport** on deploy |
 
 In AWS the API loads these via an app-side **SSM Parameter Store** provider over the `/jira-sync/`
 prefix, authorized by a single task-role grant — so adding a secret is just another parameter (no new
@@ -142,9 +142,12 @@ dotnet user-secrets set "Jira:ApiToken"     "<token>"                          -
 dotnet user-secrets set "Webhook:Secret"    "<secret>"                         --project src/SorryDave.JiraSync.Api
 dotnet user-secrets set "Slack:BotToken"    "xoxb-…"                           --project src/SorryDave.JiraSync.Api
 dotnet user-secrets set "Slack:SigningSecret" "<signing>"                      --project src/SorryDave.JiraSync.Api
-# Slack secrets ALSO go in the AppHost project so they transport to SSM on deploy:
+# Slack + Anthropic secrets ALSO go in the AppHost project so they transport to SSM on deploy:
 dotnet user-secrets set "Slack:BotToken"      "xoxb-…"    --project src/SorryDave.JiraSync.AppHost
 dotnet user-secrets set "Slack:SigningSecret" "<signing>" --project src/SorryDave.JiraSync.AppHost
+# Anthropic key (for /post conversation summarization — optional; absent = the fake extractor runs):
+dotnet user-secrets set "Anthropic:ApiKey" "sk-ant-…" --project src/SorryDave.JiraSync.Api
+dotnet user-secrets set "Anthropic:ApiKey" "sk-ant-…" --project src/SorryDave.JiraSync.AppHost
 ```
 
 ### AWS — provision the SSM parameters
@@ -153,13 +156,13 @@ dotnet user-secrets set "Slack:SigningSecret" "<signing>" --project src/SorryDav
 # Generate a strong webhook secret (example):  openssl rand -hex 32
 aws ssm put-parameter --name "/jira-sync/Jira/ApiToken"  --type SecureString --value "<token>"  --region us-east-1
 aws ssm put-parameter --name "/jira-sync/Webhook/Secret" --type SecureString --value "<secret>" --region us-east-1
-# Slack secrets are transported automatically from the AppHost user-secrets on `aspire deploy`
-# (no manual put-parameter needed) — to /jira-sync/Slack/BotToken and /jira-sync/Slack/SigningSecret.
+# Slack + Anthropic secrets are transported automatically from the AppHost user-secrets on
+# `aspire deploy` (no manual put-parameter needed) — to /jira-sync/Slack/* and /jira-sync/Anthropic/ApiKey.
 ```
 
 > **The split, and a follow-up:** the Jira token + webhook secret are `put-parameter`'d directly,
-> while Slack secrets ride the AppHost user-secrets → SSM transport. Unifying everything under the
-> AppHost transport (so an admin sets all secrets in one place) is a possible future change.
+> while Slack + Anthropic secrets ride the AppHost user-secrets → SSM transport. Unifying everything
+> under the AppHost transport (so an admin sets all secrets in one place) is a possible future change.
 
 ---
 
@@ -276,6 +279,61 @@ they're invited and get a welcome message containing the mention text.
   the mention — this needs the item's `comment_created` webhook to be registered.
 - **Jira Cloud user email is private** — by-email Slack identity resolution doesn't work on Cloud;
   use `Slack:UserMap` / `Slack:InviteUserIds`.
+
+---
+
+## Enabling conversation summarization (`/post`)
+
+Optional. Lets people run **`/post`** in a work-item channel to have Claude summarize the conversation
+**since the last `/post`** into decision/answer/summary candidates, confirm them with a button, and
+write the confirmed ones back to the Jira issue. Without an Anthropic key the pipeline still runs with
+a deterministic **fake** extractor (useful for smoke-testing the flow without spend).
+
+### 1. Provide the Anthropic key
+
+Set `Anthropic:ApiKey` as in Phase 3 (API user-secrets locally; **AppHost** user-secrets so it
+transports to SSM `/jira-sync/Anthropic/ApiKey` on deploy). With it present, the deployed API uses
+real Claude; without it, the fake.
+
+### 2. Deploy
+
+```bash
+aspire deploy --project src/SorryDave.JiraSync.AppHost --non-interactive
+```
+
+This ships the summarization endpoints (`/slack/events`, `/slack/commands`, `/slack/interactivity`,
+and the TUI smoke endpoints under `/admin/summarize`). The fake-vs-real extractor choice is made at
+**startup** from whether the key resolved — so set the key *before* the deploy (or redeploy/restart
+after adding it).
+
+### 3. Update the Slack app for summarization
+
+The summarization triggers need Slack-app config beyond channel provisioning. **Re-apply the updated
+`docs/slack-app-manifest.yaml`** (api.slack.com → your app → *App Manifest* → paste → save). It adds:
+
+- the **`/post`** slash command → `https://jsg.appcloud.systems/slack/commands`
+- **Event Subscriptions** → `https://jsg.appcloud.systems/slack/events` with `message.channels`
+  (Slack validates this URL live against the deployed endpoint)
+- **Interactivity** → `https://jsg.appcloud.systems/slack/interactivity` (the Confirm/Reject buttons)
+- the **`channels:history`** and **`commands`** bot scopes
+
+Then **reinstall the app** (scopes changed) and **invite the bot** to the channels you want captured.
+
+### 4. Use it
+
+In a provisioned, bot-present work-item channel, run **`/post`**. The bot posts an interactive card
+per candidate (kind · confidence · content + **Confirm → Jira** / **Reject**). Confirming writes the
+record to the Jira issue (idempotently) and replaces the card with the result; the channel cursor
+advances so the next `/post` only covers new conversation.
+
+### Smoke-test without Slack
+
+You can exercise the extractor (real Claude when keyed) from the **TUI**: select a work item →
+**Summarize → Summarize conversation** → type a few `author: text` lines → see the candidates →
+**Confirm → Jira**. No Slack-app config needed; works against the `local` or `aws` target.
+
+> **Cost note:** with the key set, every `/post` (and every TUI summarize) calls Claude — low volume,
+> but real spend. Leave the key unset to run the fake extractor for free.
 
 ---
 
