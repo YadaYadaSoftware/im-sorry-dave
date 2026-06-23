@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using SorryDave.JiraSync.Core.Configuration;
 using SorryDave.JiraSync.Core.Slack;
@@ -54,31 +55,52 @@ public static class SlackEventEndpoints
             return Results.Ok(); // ack within 3s; Slack retries otherwise
         });
 
-        // Slash command: /post — summarize the conversation since the last successful /post, then post
-        // each candidate as an interactive Block Kit card (Confirm/Reject) into the channel.
-        group.MapPost("/commands", async (HttpRequest req, IConversationSummarizer summarizer,
-            ISlackClient slackClient, IOptions<SlackOptions> slack, TimeProvider clock, CancellationToken ct) =>
+        // Slash command: /post — summarize since the last /post and post interactive candidate cards.
+        // Extraction calls Claude (often > Slack's 3s ack limit), so we ACK immediately and do the
+        // slow work in the background, delivering the result via the command's response_url.
+        group.MapPost("/commands", async (HttpRequest req, IServiceScopeFactory scopeFactory,
+            IHttpClientFactory httpFactory, IOptions<SlackOptions> slack, TimeProvider clock) =>
         {
             var (ok, body) = await VerifyAsync(req, slack.Value.SigningSecret, clock);
             if (!ok) return Results.Unauthorized();
 
             var form = ParseForm(body);
             var channelId = form.GetValueOrDefault("channel_id") ?? "";
-            var result = await summarizer.PostAsync(channelId, ct);
+            var responseUrl = form.GetValueOrDefault("response_url");
 
-            if (result.Outcome == "Extracted" && slack.Value.IsConfigured)
-                foreach (var c in result.Candidates)
-                    try { await slackClient.PostBlocksAsync(channelId, CandidateBlocks.Fallback(c), CandidateBlocks.Card(c), ct); }
-                    catch (SlackApiException) { /* best-effort card posting */ }
-
-            var text = result.Outcome switch
+            // Fire-and-forget with its own DI scope (the request scope disposes after we ACK). Do NOT
+            // use the request CancellationToken here — it's cancelled once the response completes.
+            _ = Task.Run(async () =>
             {
-                "NotLinked" => ":warning: This channel isn't linked to a work item.",
-                "Empty" => "Nothing new to post since the last `/post`.",
-                "Extracted" => $":memo: Posted {result.Candidates.Count} candidate(s) — review and confirm below.",
-                _ => result.Detail ?? result.Outcome,
-            };
-            return Results.Ok(new { response_type = "ephemeral", text });
+                using var scope = scopeFactory.CreateScope();
+                var summarizer = scope.ServiceProvider.GetRequiredService<IConversationSummarizer>();
+                var slackClient = scope.ServiceProvider.GetRequiredService<ISlackClient>();
+                var opts = scope.ServiceProvider.GetRequiredService<IOptions<SlackOptions>>().Value;
+                try
+                {
+                    var result = await summarizer.PostAsync(channelId, CancellationToken.None);
+                    if (result.Outcome == "Extracted" && opts.IsConfigured)
+                        foreach (var c in result.Candidates)
+                            try { await slackClient.PostBlocksAsync(channelId, CandidateBlocks.Fallback(c), CandidateBlocks.Card(c), CancellationToken.None); }
+                            catch (SlackApiException) { /* best-effort card posting */ }
+
+                    var text = result.Outcome switch
+                    {
+                        "NotLinked" => ":warning: This channel isn't linked to a work item.",
+                        "Empty" => "Nothing new to post since the last `/post`.",
+                        "Extracted" => $":memo: Posted {result.Candidates.Count} candidate(s) — review and confirm below.",
+                        _ => result.Detail ?? result.Outcome,
+                    };
+                    if (responseUrl is not null) await RespondAsync(httpFactory, responseUrl, text);
+                }
+                catch (Exception)
+                {
+                    if (responseUrl is not null) await RespondAsync(httpFactory, responseUrl, ":x: `/post` failed — see server logs.");
+                }
+            });
+
+            // Immediate ACK (well within Slack's 3s window).
+            return Results.Ok(new { response_type = "ephemeral", text = ":hourglass_flowing_sand: Summarizing this channel…" });
         });
 
         // Interactivity: confirm/reject a candidate. Replaces the card in place with the result.
@@ -114,6 +136,17 @@ public static class SlackEventEndpoints
 
             return Results.Ok();
         });
+    }
+
+    /// <summary>Post a follow-up ephemeral message to a slash command's response_url.</summary>
+    private static async Task RespondAsync(IHttpClientFactory httpFactory, string responseUrl, string text)
+    {
+        try
+        {
+            using var http = httpFactory.CreateClient();
+            await http.PostAsJsonAsync(responseUrl, new { response_type = "ephemeral", text });
+        }
+        catch { /* best-effort */ }
     }
 
     /// <summary>Replace the original interactive message via Slack's response_url (no extra scope needed).</summary>
