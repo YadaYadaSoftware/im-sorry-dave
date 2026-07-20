@@ -1,18 +1,20 @@
-using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using SorryDave.JiraSync.Core.Configuration;
 using SorryDave.JiraSync.Core.Slack;
+using SorryDave.JiraSync.Core.Slack.Commands;
 using SorryDave.JiraSync.Core.Summarization;
 
 namespace SorryDave.JiraSync.Api.Endpoints;
 
 /// <summary>
-/// Inbound Slack endpoints: the Events API (message capture + URL verification), the <c>/post</c>
-/// slash command, and interactivity (candidate confirm/reject). All requests are signature-verified
-/// against the Slack signing secret.
+/// Inbound Slack endpoints: the Events API (message capture + URL verification), slash commands, and
+/// interactivity. All requests are signature-verified against the Slack signing secret.
+///
+/// Slash commands and their interactivity actions are served by plugins; this endpoint only verifies,
+/// parses, and delegates to <see cref="SlackCommandDispatcher"/>. Which commands exist is decided by
+/// the <c>Slack:EnabledCommands</c> allow-list, not by anything here.
 /// </summary>
 public static class SlackEventEndpoints
 {
@@ -55,57 +57,28 @@ public static class SlackEventEndpoints
             return Results.Ok(); // ack within 3s; Slack retries otherwise
         });
 
-        // Slash command: /post — summarize since the last /post and post interactive candidate cards.
-        // Extraction calls Claude (often > Slack's 3s ack limit), so we ACK immediately and do the
-        // slow work in the background, delivering the result via the command's response_url.
-        group.MapPost("/commands", async (HttpRequest req, IServiceScopeFactory scopeFactory,
-            IHttpClientFactory httpFactory, IOptions<SlackOptions> slack, TimeProvider clock) =>
+        // Slash commands. Dispatch is owned by SlackCommandDispatcher in Core, which resolves the command
+        // name against the registry and owns the ack-then-background dance (Slack's 3s limit, the DI
+        // scope, and the cancellation token that must not be the request's). This endpoint is a thin
+        // adapter over it: verify, parse, delegate.
+        group.MapPost("/commands", async (HttpRequest req, SlackCommandDispatcher dispatcher,
+            IOptions<SlackOptions> slack, TimeProvider clock) =>
         {
             var (ok, body) = await VerifyAsync(req, slack.Value.SigningSecret, clock);
             if (!ok) return Results.Unauthorized();
 
-            var form = ParseForm(body);
-            var channelId = form.GetValueOrDefault("channel_id") ?? "";
-            var responseUrl = form.GetValueOrDefault("response_url");
+            // Disabled and unowned commands come back refused, with no handler started.
+            var dispatch = dispatcher.DispatchCommand(ParseForm(body));
 
-            // Fire-and-forget with its own DI scope (the request scope disposes after we ACK). Do NOT
-            // use the request CancellationToken here — it's cancelled once the response completes.
-            _ = Task.Run(async () =>
-            {
-                using var scope = scopeFactory.CreateScope();
-                var summarizer = scope.ServiceProvider.GetRequiredService<IConversationSummarizer>();
-                var slackClient = scope.ServiceProvider.GetRequiredService<ISlackClient>();
-                var opts = scope.ServiceProvider.GetRequiredService<IOptions<SlackOptions>>().Value;
-                try
-                {
-                    var result = await summarizer.PostAsync(channelId, CancellationToken.None);
-                    if (result.Outcome == "Extracted" && opts.IsConfigured)
-                        foreach (var c in result.Candidates)
-                            try { await slackClient.PostBlocksAsync(channelId, CandidateBlocks.Fallback(c), CandidateBlocks.Card(c), CancellationToken.None); }
-                            catch (SlackApiException) { /* best-effort card posting */ }
-
-                    var text = result.Outcome switch
-                    {
-                        "NotLinked" => ":warning: This channel isn't linked to a work item.",
-                        "Empty" => "Nothing new to post since the last `/post`.",
-                        "Extracted" => $":memo: Posted {result.Candidates.Count} candidate(s) — review and confirm below.",
-                        _ => result.Detail ?? result.Outcome,
-                    };
-                    if (responseUrl is not null) await RespondAsync(httpFactory, responseUrl, text);
-                }
-                catch (Exception)
-                {
-                    if (responseUrl is not null) await RespondAsync(httpFactory, responseUrl, ":x: `/post` failed — see server logs.");
-                }
-            });
-
-            // Immediate ACK (well within Slack's 3s window).
-            return Results.Ok(new { response_type = "ephemeral", text = ":hourglass_flowing_sand: Summarizing this channel…" });
+            // Immediate ACK (well within Slack's 3s window); the handler, if any, runs on.
+            return Results.Ok(new { response_type = "ephemeral", text = dispatch.AckText });
         });
 
-        // Interactivity: confirm/reject a candidate. Replaces the card in place with the result.
-        group.MapPost("/interactivity", async (HttpRequest req, IConversationSummarizer summarizer,
-            IHttpClientFactory httpFactory, IOptions<SlackOptions> slack, TimeProvider clock, CancellationToken ct) =>
+        // Interactivity: dispatch by namespaced action id to the plugin that owns it. Replaces the card
+        // in place with the result. Actions whose command is no longer registered — a stale button on an
+        // old card — are refused rather than handled.
+        group.MapPost("/interactivity", async (HttpRequest req, SlackCommandDispatcher dispatcher,
+            ISlackResponder responder, IOptions<SlackOptions> slack, TimeProvider clock, CancellationToken ct) =>
         {
             var (ok, body) = await VerifyAsync(req, slack.Value.SigningSecret, clock);
             if (!ok) return Results.Unauthorized();
@@ -115,49 +88,24 @@ public static class SlackEventEndpoints
             using var doc = JsonDocument.Parse(payloadJson);
             var root = doc.RootElement;
             var action = root.GetProperty("actions")[0];
-            var actionId = action.GetProperty("action_id").GetString();        // "confirm" | "reject"
-            var candidateId = Guid.Parse(action.GetProperty("value").GetString()!);
-            var user = root.TryGetProperty("user", out var u) ? Str(u, "id") : null;
+            var actionId = Str(action, "action_id");                           // "post:confirm" | "post:reject"
             var responseUrl = Str(root, "response_url");
 
-            var outcome = actionId == "confirm"
-                ? await summarizer.ConfirmAsync(candidateId, user, ct)
-                : await summarizer.RejectAsync(candidateId, ct);
+            var context = new SlackActionContext(
+                ActionName: "",                                                // filled in by the dispatcher
+                Value: Str(action, "value"),
+                UserId: root.TryGetProperty("user", out var u) ? Str(u, "id") : null,
+                ChannelId: root.TryGetProperty("channel", out var c) ? Str(c, "id") : null,
+                ResponseUrl: responseUrl);
+
+            var result = await dispatcher.DispatchActionAsync(actionId, context, ct);
 
             // Report the result by replacing the original card (removes the buttons).
-            var headline = outcome switch
-            {
-                "Confirmed" => $":white_check_mark: Confirmed and written back to Jira{(user is null ? "" : $" by <@{user}>")}.",
-                "Rejected" => ":x: Rejected — not written back.",
-                _ => $"Candidate {outcome}.",
-            };
             if (responseUrl is not null)
-                await ReplaceOriginalAsync(httpFactory, responseUrl, headline, CandidateBlocks.Result(headline), ct);
+                await responder.ReplaceOriginalAsync(responseUrl, result.Headline, CandidateBlocks.Result(result.Headline), ct);
 
             return Results.Ok();
         });
-    }
-
-    /// <summary>Post a follow-up ephemeral message to a slash command's response_url.</summary>
-    private static async Task RespondAsync(IHttpClientFactory httpFactory, string responseUrl, string text)
-    {
-        try
-        {
-            using var http = httpFactory.CreateClient();
-            await http.PostAsJsonAsync(responseUrl, new { response_type = "ephemeral", text });
-        }
-        catch { /* best-effort */ }
-    }
-
-    /// <summary>Replace the original interactive message via Slack's response_url (no extra scope needed).</summary>
-    private static async Task ReplaceOriginalAsync(IHttpClientFactory httpFactory, string responseUrl, string text, object blocks, CancellationToken ct)
-    {
-        try
-        {
-            using var http = httpFactory.CreateClient();
-            await http.PostAsJsonAsync(responseUrl, new { replace_original = true, text, blocks }, ct);
-        }
-        catch { /* best-effort */ }
     }
 
     private static async Task<(bool Ok, string Body)> VerifyAsync(HttpRequest req, string? signingSecret, TimeProvider clock)

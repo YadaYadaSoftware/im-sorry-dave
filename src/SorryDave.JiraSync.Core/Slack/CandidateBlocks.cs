@@ -8,6 +8,14 @@ namespace SorryDave.JiraSync.Core.Slack;
 /// </summary>
 public static class CandidateBlocks
 {
+    /// <summary>Action ids are namespaced to the owning command plugin, so the dispatcher can resolve
+    /// the owner from the id alone. Cards posted before namespacing carry bare ids, which resolve to no
+    /// plugin and are refused — the intended outcome for a stale button on an old message.</summary>
+    public const string ConfirmActionId = "post:confirm";
+
+    /// <inheritdoc cref="ConfirmActionId"/>
+    public const string RejectActionId = "post:reject";
+
     /// <summary>Notification fallback text for a candidate card.</summary>
     public static string Fallback(SummaryCandidate c) => $"{c.Kind} candidate for {c.WorkItemKey}: {c.Content}";
 
@@ -29,8 +37,8 @@ public static class CandidateBlocks
             type = "actions",
             elements = new object[]
             {
-                new { type = "button", text = new { type = "plain_text", text = "Confirm → Jira" }, style = "primary", action_id = "confirm", value = c.Id.ToString() },
-                new { type = "button", text = new { type = "plain_text", text = "Reject" }, style = "danger", action_id = "reject", value = c.Id.ToString() },
+                new { type = "button", text = new { type = "plain_text", text = "Confirm → Jira" }, style = "primary", action_id = ConfirmActionId, value = c.Id.ToString() },
+                new { type = "button", text = new { type = "plain_text", text = "Reject" }, style = "danger", action_id = RejectActionId, value = c.Id.ToString() },
             },
         },
     };

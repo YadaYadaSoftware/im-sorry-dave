@@ -2,12 +2,24 @@
 
 Jira is the source of truth. The platform mirrors work items, provisions a Slack channel per item,
 captures conversation, and writes decisions/answers back to Jira through an idempotent outbox. The
-existing seams are already in place: `IJiraClient` (get/search/add+edit comment, plus assignee and
-status mutations), `IWriteBackService.SubmitAsync` (idempotent on `WorkItemKey`+`RecordIdentity`),
+existing seams are already in place: `IJiraClient` (get/search/add+edit comment),
+`IWriteBackService.SubmitAsync` (idempotent on `WorkItemKey`+`RecordIdentity`),
 `IMappingStore.ResolveByResourceAsync(ResourceType.SlackChannel, channelId)` for the channel↔work-item
 link, Slack endpoints under `/slack` (signature-verified; slash at `/slack/commands`, interactivity
 at `/slack/interactivity`), and `WebhookProcessor` which already handles `comment_created`. This
 change closes the loop in both directions using those seams without new infrastructure.
+
+> **Correction (2026-07-20).** An earlier revision of this paragraph claimed `IJiraClient` already had
+> assignee and status mutations. It does not: the interface has exactly two write methods,
+> `AddCommentAsync` and `UpdateCommentAsync`. The `/assign` and `/status` flows below therefore require
+> **adding** assignee-update and transition methods to `IJiraClient`, `JiraRestClient`, and
+> `FakeJiraClient` — work this change's task list must account for and currently does not.
+>
+> **Build commands as plugins.** Since `slack-command-plugins` landed, slash commands are not wired into
+> `SlackEventEndpoints` — every command implements `ISlackCommandPlugin`, owns its own interactivity
+> actions under namespaced action ids, and is served only when named in the `Slack:EnabledCommands`
+> allow-list. `/assign`, `/status`, and `/comment` should be authored against that contract rather than
+> the endpoint. Note that all three are Jira **writes**, which are currently not permitted.
 
 ## Goals / Non-Goals
 

@@ -13,6 +13,29 @@
 # The request URLs below point at the deployed API (https://jsg.appcloud.systems). Slack validates the
 # Events URL live (it must answer the url_verification challenge) — the /slack/events endpoint is
 # deployed and does this. Change the host if you deploy elsewhere.
+#
+# ---------------------------------------------------------------------------------------------------
+# SLASH COMMANDS ARE GENERATED. The block between the BEGIN/END markers below is rendered from the
+# commands the app actually serves — do not hand-edit it. Which commands those are is decided by the
+# Slack:EnabledCommands allow-list in configuration, NOT by this file: the app never reads this manifest.
+#
+# The two layers do different jobs and both are needed for a command to be genuinely gone:
+#   - configuration makes a command FAIL if a user types it
+#   - this manifest makes it DISAPPEAR from Slack's autocomplete
+#
+# No slash commands are currently enabled. /post is disabled because we are not permitted to write to
+# Jira; its implementation is intact and unchanged.
+#
+# To enable (or re-enable) a command:
+#   1. add its name to Slack:EnabledCommands (e.g. "post") in appsettings.json / the SSM parameter
+#   2. redeploy
+#   3. regenerate this file and re-upload it at https://api.slack.com/apps -> App Manifest
+# To disable one, reverse it — but re-upload the manifest BEFORE or alongside the config change, since
+# configuration alone leaves the command visible in autocomplete until Slack has the new manifest.
+#
+# Changing the command list never changes OAuth scopes — the `commands` scope below covers every slash
+# command — so this is a manifest re-upload, never an app reinstall or re-authorization.
+# ---------------------------------------------------------------------------------------------------
 
 display_information:
   name: im-sorry-dave
@@ -23,11 +46,8 @@ features:
   bot_user:
     display_name: im-sorry-dave
     always_online: true
-  slash_commands:
-    - command: /post
-      url: https://jsg.appcloud.systems/slack/commands
-      description: Summarize the conversation since the last /post and post candidates for Jira
-      should_escape: false
+  # BEGIN generated slash_commands — regenerate; do not hand-edit
+  # END generated slash_commands
 
 oauth_config:
   scopes:
@@ -36,7 +56,8 @@ oauth_config:
       - channels:read        # look up channels (name-collision detection, link reconciliation)
       - channels:history     # read channel messages for conversation capture (Events API)
       - chat:write           # post context / status / candidate cards / results
-      - commands             # the /post slash command
+      - commands             # slash commands (retained while none are enabled, so re-enabling one
+                             # needs only a manifest re-upload, not a reinstall)
       - pins:write           # pin the Jira link in the channel
       - users:read           # resolve Slack users
       - users:read.email     # map Jira users to Slack users by email (best-effort)
@@ -48,7 +69,7 @@ settings:
       - message.channels     # capture conversation in provisioned channels
   interactivity:
     is_enabled: true
-    request_url: https://jsg.appcloud.systems/slack/interactivity   # Confirm/Reject candidate buttons
+    request_url: https://jsg.appcloud.systems/slack/interactivity   # candidate Confirm/Reject buttons
   org_deploy_enabled: false
   socket_mode_enabled: false
   token_rotation_enabled: false

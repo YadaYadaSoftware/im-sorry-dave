@@ -94,3 +94,10 @@ or dependencies are missing.
   tune from real channels.
 - Whether `/ask` should also work outside a work-item channel (it can, since the key is explicit) — yes
   by default; the mention path is channel-scoped.
+
+
+> **Build any slash command as a plugin.** Since `slack-command-plugins` landed, commands are not wired
+> into `SlackEventEndpoints`: each implements `ISlackCommandPlugin`, owns its interactivity actions under
+> namespaced action ids (`plugin:action`), and is served only when named in the `Slack:EnabledCommands`
+> allow-list. The host owns Slack's ack-then-background handling, so handlers need not manage it.
+> Commands that write to Jira cannot currently be enabled.

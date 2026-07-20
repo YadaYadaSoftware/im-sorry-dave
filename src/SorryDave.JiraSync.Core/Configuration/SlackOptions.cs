@@ -30,6 +30,12 @@ public class SlackOptions
     /// enterprise identity API.</summary>
     public Dictionary<string, string> UserMap { get; set; } = new();
 
+    /// <summary>Slash commands the app serves, by name without the leading slash (e.g. <c>post</c>).
+    /// This is an allow-list and <b>absence means disabled</b> — a command plugin that exists in the
+    /// container is not served unless it is named here, so a new command cannot ship enabled by
+    /// oversight. Empty (the default) serves no slash commands at all.</summary>
+    public List<string> EnabledCommands { get; set; } = new();
+
     /// <summary>Master switch for auto-inviting on provision and assignee change.</summary>
     public bool AutoInvite { get; set; } = true;
 
@@ -44,4 +50,10 @@ public class SlackOptions
 
     public bool IsClosed(string status)
         => ClosedStatuses.Any(s => string.Equals(s, status, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Whether a slash command is allowed to be registered. Leading slashes are tolerated so
+    /// <c>/post</c> and <c>post</c> both work in configuration.</summary>
+    public bool IsCommandEnabled(string commandName)
+        => EnabledCommands.Any(c => string.Equals(c.TrimStart('/'), commandName.TrimStart('/'),
+            StringComparison.OrdinalIgnoreCase));
 }

@@ -10,6 +10,8 @@ using SorryDave.JiraSync.Core.Jira;
 using SorryDave.JiraSync.Core.Mapping;
 using SorryDave.JiraSync.Core.Persistence;
 using SorryDave.JiraSync.Core.Slack;
+using SorryDave.JiraSync.Core.Slack.Commands;
+using SorryDave.JiraSync.Core.Slack.Commands.Plugins;
 using SorryDave.JiraSync.Core.Summarization;
 using SorryDave.JiraSync.Core.Sync;
 using SorryDave.JiraSync.Core.WriteBack;
@@ -82,6 +84,16 @@ public static class ServiceCollectionExtensions
         else
             services.AddScoped<IDecisionExtractor, FakeDecisionExtractor>();
         services.AddScoped<IConversationSummarizer, ConversationSummarizer>();
+
+        // Slash commands. Every command is a plugin; the registry serves only those named in
+        // Slack:EnabledCommands, so a command is turned off by configuration rather than by deleting it.
+        // Plugins are registered unconditionally here — the allow-list, not the container, decides what
+        // is served, and the startup logger reports which plugins were skipped.
+        services.AddScoped<ISlackCommandPlugin, PostCommandPlugin>();
+        services.AddScoped<ISlackCommandRegistry, SlackCommandRegistry>();
+        services.AddScoped<SlackCommandDispatcher>();
+        services.AddSingleton<ISlackResponder, SlackResponder>();
+        services.AddHostedService<SlackCommandRegistryLogger>();
 
         services.AddHostedService<ReconciliationBackgroundService>();
         services.AddHostedService<WriteBackBackgroundService>();

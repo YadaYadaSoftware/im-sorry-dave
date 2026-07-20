@@ -48,8 +48,9 @@ public class SignatureAndRedactionTests
         };
         var json = JsonSerializer.Serialize(CandidateBlocks.Card(c));
 
-        Assert.Contains("\"action_id\":\"confirm\"", json);
-        Assert.Contains("\"action_id\":\"reject\"", json);
+        // Namespaced to the owning plugin so the dispatcher can resolve the owner from the id alone.
+        Assert.Contains("\"action_id\":\"post:confirm\"", json);
+        Assert.Contains("\"action_id\":\"post:reject\"", json);
         Assert.Contains(c.Id.ToString(), json);       // button value = candidate id
         Assert.Contains("ship Friday", json);
         Assert.Contains("\"type\":\"actions\"", json);

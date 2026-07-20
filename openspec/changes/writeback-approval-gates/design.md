@@ -111,3 +111,10 @@ the user-visible contract; it must not invite a click that will be rejected.
   attribution), or only in Slack? (Starting position: system attribution in both.)
 - For group approvers, is any group member sufficient, or do we later need a specific member? (Starting
   position: any member of the named group.)
+
+
+> **Build any slash command as a plugin.** Since `slack-command-plugins` landed, commands are not wired
+> into `SlackEventEndpoints`: each implements `ISlackCommandPlugin`, owns its interactivity actions under
+> namespaced action ids (`plugin:action`), and is served only when named in the `Slack:EnabledCommands`
+> allow-list. The host owns Slack's ack-then-background handling, so handlers need not manage it.
+> Commands that write to Jira cannot currently be enabled.
