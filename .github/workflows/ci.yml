@@ -1,0 +1,55 @@
+# Build and test the solution on every push and pull request.
+#
+# Replaces the WPF/WinForms starter template this repo was created with, which referenced
+# placeholder names (`your-solution-name`) and MSIX packaging that do not apply here — it failed
+# on every push. This is an ASP.NET Core API plus an Aspire AppHost.
+#
+# Deployment is NOT run here. `aspire deploy` needs AWS credentials, Docker, and the CDK toolchain,
+# and is run deliberately by an administrator — see INSTRUCTIONS.md.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore im-sorry-dave.slnx
+
+      - name: Build
+        run: dotnet build im-sorry-dave.slnx --configuration Release --no-restore
+
+      # JiraRoundTripIntegrationTests is a SkippableFact that self-skips without Jira credentials,
+      # so it reports as skipped here rather than failing. It is the only test that reaches a live
+      # service; everything else runs against in-memory SQLite and test doubles.
+      - name: Test
+        run: >
+          dotnet test tests/SorryDave.JiraSync.Tests/SorryDave.JiraSync.Tests.csproj
+          --configuration Release
+          --no-build
+          --logger "trx;LogFileName=test-results.trx"
+          --collect:"XPlat Code Coverage"
+          --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/
+          retention-days: 14
