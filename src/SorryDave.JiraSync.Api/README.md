@@ -144,7 +144,7 @@ export ConnectionStrings__JiraSync="Data Source=/data/jirasync.db"
 export Jira__BaseUrl="https://your-org.atlassian.net"
 export Jira__Email="svc@your-org.com"
 export Jira__ApiToken="<token>"            # from a secret store
-export Jira__ProjectKeys__0="MDP"
+export Jira__ProjectKeys__0="PROJ"
 export Webhook__Secret="<shared-secret>"   # from a secret store
 dotnet SorryDave.JiraSync.Api.dll
 ```

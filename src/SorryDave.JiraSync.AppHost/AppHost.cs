@@ -66,9 +66,9 @@ else
     api.WithEnvironment("ConnectionStrings__JiraSync", "Data Source=/data/jirasync.db")
        // Non-secret Jira config; secrets (Jira token, webhook secret, future Slack/Anthropic keys)
        // are resolved at runtime from SSM Parameter Store — see Aws__ParameterStorePath below.
-       .WithEnvironment("Jira__BaseUrl", "https://tim-bassett.atlassian.net/")
-       .WithEnvironment("Jira__Email", "hounddog@gmail.com")
-       .WithEnvironment("Jira__ProjectKeys__0", "MDP")
+       .WithEnvironment("Jira__BaseUrl", "https://elevate-digital.atlassian.net/")
+       .WithEnvironment("Jira__Email", "tim-bassett@elevate-digital.com")
+       .WithEnvironment("Jira__ProjectKeys__0", "SPMCLOUD")
        // Enable the API's SSM Parameter Store provider over the /jira-sync prefix
        // (/jira-sync/Jira/ApiToken -> Jira:ApiToken, /jira-sync/Webhook/Secret -> Webhook:Secret).
        // The task role is granted read on this prefix in the construct callback below.
