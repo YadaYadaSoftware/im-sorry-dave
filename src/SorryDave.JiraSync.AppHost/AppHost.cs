@@ -72,6 +72,10 @@ else
     //   dotnet user-secrets set "Jira:Email"         "svc@your-org.com"                --project src/SorryDave.JiraSync.AppHost
     //   dotnet user-secrets set "Jira:ProjectKeys:0" "PROJ"                            --project src/SorryDave.JiraSync.AppHost
     //
+    // Jira:SiteUrl is optional and defaults to Jira:BaseUrl. Set it only when BaseUrl points at the API
+    // gateway (which a scoped token requires), because issue links shown in Slack are built from the
+    // site URL and a gateway URL is not browsable.
+    //
     // Deploying against the wrong Jira instance is worse than not deploying, so these are required
     // rather than defaulted — an unset value fails the deploy instead of silently shipping whatever
     // the last person happened to hardcode. The API token travels separately, via the SSM transport
@@ -84,6 +88,7 @@ else
        // Non-secret Jira config; secrets (Jira token, webhook secret, Slack/Anthropic keys) are
        // resolved at runtime from SSM Parameter Store — see Aws__ParameterStorePath below.
        .WithEnvironment("Jira__BaseUrl", jiraBaseUrl)
+       .WithEnvironment("Jira__SiteUrl", builder.Configuration["Jira:SiteUrl"] ?? jiraBaseUrl)
        .WithEnvironment("Jira__Email", jiraEmail)
        .WithEnvironment("Jira__ProjectKeys__0", jiraProjectKey)
        // Enable the API's SSM Parameter Store provider over the /jira-sync prefix

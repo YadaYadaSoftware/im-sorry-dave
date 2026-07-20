@@ -302,8 +302,12 @@ public sealed class SlackChannelService : ISlackChannelService
         => (await _mappings.GetMappingsForWorkItemAsync(key, ct))
             .FirstOrDefault(m => m.ResourceType == ResourceType.SlackChannel);
 
+    // Built from the site URL, not the API base — those differ when a scoped token routes the REST
+    // client through the API gateway, and gateway URLs are not browsable.
     private string? BrowseUrl(string key)
-        => string.IsNullOrWhiteSpace(_jira.BaseUrl) ? null : $"{_jira.BaseUrl!.TrimEnd('/')}/browse/{key}";
+        => string.IsNullOrWhiteSpace(_jira.EffectiveSiteUrl)
+            ? null
+            : $"{_jira.EffectiveSiteUrl!.TrimEnd('/')}/browse/{key}";
 
     private static string BuildTopic(string status, string? assignee, string? url)
     {
