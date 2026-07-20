@@ -34,24 +34,85 @@ This deployment runs in **us-east-1** (account `991795635857`, stack `aws2` in t
 
 ### 1.1 API token and account permissions
 
-1. Create an API token at **id.atlassian.com → Security → API tokens**. The service authenticates as
-   the **owning user** via Basic auth (email + token).
-2. That account needs, on the tracked project:
-   - **Browse Projects** — to mirror issues.
-   - **Add Comments** — write-back posts managed comments.
-3. **Registering the webhook requires a Jira admin** (System → WebHooks, or the REST API below).
+Create an API token at **id.atlassian.com → Security → API tokens**. The service authenticates as the
+**owning user** via HTTP Basic auth (email + token).
+
+#### What the token can do
+
+A classic Jira Cloud API token **has no scopes**. It is proof that you are that user, and it inherits
+the account's permissions in full — you cannot narrow it at the token. So the question to answer is
+*what the service account is allowed to do on the tracked project*, not *what the token is scoped to*.
+
+If you create a **scoped** API token instead (a newer Atlassian option), the equivalent classic scope
+is `read:jira-work`; `write:jira-work` covers the comment writes. A granular set also exists
+(`read:issue:jira`, `read:comment:jira`, `write:comment:jira`). Prefer `read:jira-work` unless you have
+a reason to go granular.
+
+#### Permissions the service account needs
+
+| Permission | Needed for | Required? |
+|---|---|---|
+| **Browse Projects** | issue reads and JQL search | **Yes** — nothing works without it |
+| **Add Comments** | posting write-back comments | Only if write-back is permitted |
+| **Edit Own Comments** | updating a previously written comment in place | Only if write-back is permitted |
+
+**Grant only Browse Projects unless write-back is explicitly permitted.** The two comment permissions
+are the entire write surface; without them the platform still mirrors issues, provisions channels,
+captures conversation, and summarizes — it simply cannot record anything back to Jira.
+
+No user-directory permission is needed: the service never calls a user endpoint. Assignee and reporter
+arrive as fields on the issue read.
+
+#### The complete API surface
+
+The service calls exactly five endpoints. Nothing else is exercised, so nothing else needs granting:
+
+| Endpoint | Verb | Kind |
+|---|---|---|
+| `rest/api/3/issue/{key}?fields=…` | GET | read |
+| `rest/api/3/search/jql` | POST | **read** — POST is the request shape, not a mutation |
+| `rest/api/3/issue/{key}/comment/{id}` | GET | read |
+| `rest/api/3/issue/{key}/comment` | POST | write |
+| `rest/api/3/issue/{key}/comment/{id}` | PUT | write |
+
+#### If write permission is withheld
+
+Reads are unaffected. Any write-back that reaches the outbox will get **403**, which
+`WriteBackSender` treats as transient — so the record retries with exponential backoff up to
+`Sync:MaxWriteBackAttempts` (default 8) before being marked `Failed`. Nothing breaks, but expect retry
+noise in the logs if anything enqueues. To avoid it entirely, leave the slash commands that produce
+write-back candidates out of `Slack:EnabledCommands` (Phase 2).
+
+**Registering the webhook requires a Jira admin** (System → WebHooks, or the REST API below). That is a
+property of the person configuring it, not of the token — the webhook authenticates back to the service
+with the `?secret=` query parameter.
 
 ### 1.2 Configuration and webhook registration
 
-Non-secret Jira config (set as env in the AppHost / `appsettings.json`; the token is a secret — see
-Phase 3):
+All four values live in the **AppHost's user-secrets** and are read at deploy time. Switching Jira
+instances is therefore a configuration change, not a code change:
 
-| Key | Value |
-|---|---|
-| `Jira:BaseUrl` | `https://your-org.atlassian.net/` |
-| `Jira:Email` | the token owner's email |
-| `Jira:ProjectKeys` | the tracked project(s), e.g. `["MDP"]` |
-| `Jira:ApiToken` | **secret** (Phase 3) |
+```bash
+dotnet user-secrets set "Jira:BaseUrl"       "https://your-org.atlassian.net/" --project src/SorryDave.JiraSync.AppHost
+dotnet user-secrets set "Jira:Email"         "svc@your-org.com"                --project src/SorryDave.JiraSync.AppHost
+dotnet user-secrets set "Jira:ProjectKeys:0" "PROJ"                            --project src/SorryDave.JiraSync.AppHost
+dotnet user-secrets set "Jira:ApiToken"      "<token>"                         --project src/SorryDave.JiraSync.AppHost
+```
+
+| Key | Value | Reaches AWS as |
+|---|---|---|
+| `Jira:BaseUrl` | `https://your-org.atlassian.net/` | ECS environment variable |
+| `Jira:Email` | the token owner's email | ECS environment variable |
+| `Jira:ProjectKeys:0` | the tracked project, e.g. `PROJ` | ECS environment variable |
+| `Jira:ApiToken` | **secret** | SSM `SecureString` (Phase 3 transport) |
+
+The first three are **required**: `aspire deploy` fails naming the missing key rather than falling back,
+so a deployment can never silently target the wrong Jira instance.
+
+> **Changing instances?** Repointing at a different Jira site or project leaves the mirrored work items
+> from the previous project in the database, along with the Slack channel mappings referring to them.
+> Those keys no longer resolve, so reconciliation will keep probing them. Plan to clear the database as
+> part of the switch — see Phase 5.
 
 Register the inbound webhook (Jira **Settings → System → WebHooks**, or the REST API):
 
@@ -123,8 +184,8 @@ appsettings.json (non-secret defaults)  →  SSM /jira-sync/* (prod)  →  env v
 
 | Config key | Local (debug) | AWS (prod) | How it reaches AWS |
 |---|---|---|---|
-| `Jira:ApiToken` | API user-secrets | SSM `/jira-sync/Jira/ApiToken` | `aws ssm put-parameter` |
-| `Webhook:Secret` | API user-secrets | SSM `/jira-sync/Webhook/Secret` | `aws ssm put-parameter` |
+| `Jira:ApiToken` | API + AppHost user-secrets | SSM `/jira-sync/Jira/ApiToken` | **AppHost transport** on deploy |
+| `Webhook:Secret` | API + AppHost user-secrets | SSM `/jira-sync/Webhook/Secret` | **AppHost transport** on deploy |
 | `Slack:BotToken` | API + AppHost user-secrets | SSM `/jira-sync/Slack/BotToken` | **AppHost transport** on deploy |
 | `Slack:SigningSecret` | API + AppHost user-secrets | SSM `/jira-sync/Slack/SigningSecret` | **AppHost transport** on deploy |
 | `Anthropic:ApiKey` | API + AppHost user-secrets | SSM `/jira-sync/Anthropic/ApiKey` | **AppHost transport** on deploy |

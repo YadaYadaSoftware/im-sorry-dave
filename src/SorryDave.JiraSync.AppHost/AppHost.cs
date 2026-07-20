@@ -35,6 +35,8 @@ else
     // Idempotent upsert; only keys present locally are written (so a missing bot token is skipped).
     var transportable = new (string Key, string Param)[]
     {
+        ("Jira:ApiToken", "/jira-sync/Jira/ApiToken"),
+        ("Webhook:Secret", "/jira-sync/Webhook/Secret"),
         ("Slack:BotToken", "/jira-sync/Slack/BotToken"),
         ("Slack:SigningSecret", "/jira-sync/Slack/SigningSecret"),
         ("Anthropic:ApiKey", "/jira-sync/Anthropic/ApiKey"),
@@ -63,12 +65,27 @@ else
     builder.AddAWSCDKEnvironment("aws2", CDKDefaultsProviderFactory.Preview_V1);
     // SQLite lives on an EFS-mounted /data (durable across task restarts/redeploys). The EFS file
     // system, access point, volume, and mount are wired in the construct callback below.
+    // Which Jira instance/project the deployment targets. Read from the AppHost's own configuration
+    // (user-secrets) so switching instances is a configuration change, not a code change:
+    //
+    //   dotnet user-secrets set "Jira:BaseUrl"       "https://your-org.atlassian.net/" --project src/SorryDave.JiraSync.AppHost
+    //   dotnet user-secrets set "Jira:Email"         "svc@your-org.com"                --project src/SorryDave.JiraSync.AppHost
+    //   dotnet user-secrets set "Jira:ProjectKeys:0" "PROJ"                            --project src/SorryDave.JiraSync.AppHost
+    //
+    // Deploying against the wrong Jira instance is worse than not deploying, so these are required
+    // rather than defaulted — an unset value fails the deploy instead of silently shipping whatever
+    // the last person happened to hardcode. The API token travels separately, via the SSM transport
+    // above, because it is a secret and belongs in Parameter Store rather than an ECS env var.
+    var jiraBaseUrl = Required("Jira:BaseUrl");
+    var jiraEmail = Required("Jira:Email");
+    var jiraProjectKey = Required("Jira:ProjectKeys:0");
+
     api.WithEnvironment("ConnectionStrings__JiraSync", "Data Source=/data/jirasync.db")
-       // Non-secret Jira config; secrets (Jira token, webhook secret, future Slack/Anthropic keys)
-       // are resolved at runtime from SSM Parameter Store — see Aws__ParameterStorePath below.
-       .WithEnvironment("Jira__BaseUrl", "https://elevate-digital.atlassian.net/")
-       .WithEnvironment("Jira__Email", "tim-bassett@elevate-digital.com")
-       .WithEnvironment("Jira__ProjectKeys__0", "SPMCLOUD")
+       // Non-secret Jira config; secrets (Jira token, webhook secret, Slack/Anthropic keys) are
+       // resolved at runtime from SSM Parameter Store — see Aws__ParameterStorePath below.
+       .WithEnvironment("Jira__BaseUrl", jiraBaseUrl)
+       .WithEnvironment("Jira__Email", jiraEmail)
+       .WithEnvironment("Jira__ProjectKeys__0", jiraProjectKey)
        // Enable the API's SSM Parameter Store provider over the /jira-sync prefix
        // (/jira-sync/Jira/ApiToken -> Jira:ApiToken, /jira-sync/Webhook/Secret -> Webhook:Secret).
        // The task role is granted read on this prefix in the construct callback below.
@@ -197,3 +214,12 @@ else
 }
 
 builder.Build().Run();
+
+// Read a deploy-time setting that must be configured, naming the key and how to set it when absent.
+// Fails the deploy rather than falling back, so a missing value can never ship as someone else's Jira.
+string Required(string key)
+    => builder.Configuration[key] is { Length: > 0 } value
+        ? value
+        : throw new InvalidOperationException(
+            $"Required AppHost setting '{key}' is not configured. Set it with:{Environment.NewLine}" +
+            $"  dotnet user-secrets set \"{key}\" \"<value>\" --project src/SorryDave.JiraSync.AppHost");
